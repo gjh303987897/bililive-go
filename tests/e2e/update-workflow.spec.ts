@@ -18,7 +18,7 @@ import * as path from 'path';
  * 可以使用以下命令运行这些测试：
  * ```bash
  * # 终端 1: 构建开发版本
- * make dev-incremental
+ * go run ./build.go dev-incremental
  * 
  * # 终端 2: 启动 mock server
  * go run ./test/update-mock-server -version 99.0.0

@@ -24,6 +24,7 @@ var customVersion string
 var customPlatform string
 var customArch string
 var customNoTelemetry bool
+var reportCommit string
 
 func RunCmd() int {
 	app := kingpin.New("Build tool", "bililive-go Build tool.")
@@ -49,6 +50,14 @@ func RunCmd() int {
 	app.Command("test", "Run tests.").Action(goTest)
 	app.Command("generate", "go generate ./...").Action(goGenerate)
 	app.Command("build-web", "Build webapp.").Action(buildWeb)
+	app.Command("lint", "Run golangci-lint.").Action(lint)
+	app.Command("test-e2e", "Run Playwright E2E tests.").Action(testE2E)
+	app.Command("test-e2e-ui", "Run Playwright E2E tests in UI mode.").Action(testE2EUI)
+	app.Command("install-e2e", "Install Playwright E2E dependencies.").Action(installE2E)
+	app.Command("show-report", "Open the Playwright HTML report.").Action(showReport)
+	serveReportCmd := app.Command("serve-report", "Start the Playwright report server.")
+	serveReportCmd.Flag("commit", "Fetch source code for the specified commit.").StringVar(&reportCommit)
+	serveReportCmd.Action(serveReport)
 	app.Command("sync-agents", "同步 AGENTS.md 到其他 AI 指示文件").Action(syncAgents)
 	app.Command("check-agents", "检查 AI 指示文件是否一致").Action(checkAgents)
 	app.Command("clean", "清理构建产物").Action(cleanBuild)
@@ -113,8 +122,8 @@ func buildWeb(c *kingpin.ParseContext) error {
 	webappDir := filepath.Join("src", "webapp")
 	err := utils.ExecCommandsInDir(
 		[][]string{
-			{"yarn", "install"},
-			{"yarn", "build"},
+			{"npm", "ci", "--no-audit", "--no-fund"},
+			{"npm", "run", "build"},
 		},
 		webappDir,
 	)
@@ -122,6 +131,48 @@ func buildWeb(c *kingpin.ParseContext) error {
 		return err
 	}
 	return nil
+}
+
+func lint(c *kingpin.ParseContext) error {
+	return utils.ExecCommand([]string{
+		"golangci-lint", "run",
+		"--path-mode=abs",
+		"--build-tags=dev",
+	})
+}
+
+func testE2E(c *kingpin.ParseContext) error {
+	return utils.ExecCommand([]string{"npx", "playwright", "test"})
+}
+
+func testE2EUI(c *kingpin.ParseContext) error {
+	return utils.ExecCommand([]string{"npx", "playwright", "test", "--ui"})
+}
+
+func installE2E(c *kingpin.ParseContext) error {
+	err := utils.ExecCommandsInDir(
+		[][]string{
+			{"npm", "ci", "--no-audit", "--no-fund"},
+			{"npx", "playwright", "install", "--with-deps", "chromium"},
+		},
+		".",
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func showReport(c *kingpin.ParseContext) error {
+	return utils.ExecCommand([]string{"npx", "playwright", "show-report", "playwright-report"})
+}
+
+func serveReport(c *kingpin.ParseContext) error {
+	args := []string{"scripts/report-server.js"}
+	if reportCommit != "" {
+		args = append(args, "--commit", reportCommit)
+	}
+	return utils.ExecCommand(append([]string{"node"}, args...))
 }
 
 // syncAgents 将 AGENTS.md 同步到其他 AI 指示文件
@@ -159,7 +210,7 @@ func checkAgents(c *kingpin.ParseContext) error {
 		}
 
 		if !bytes.Equal(source, targetContent) {
-			fmt.Printf("错误：%s 与 %s 不一致，请运行 make sync-agents\n", target, sourceAgentFile)
+			fmt.Printf("错误：%s 与 %s 不一致，请运行 go run ./build.go sync-agents\n", target, sourceAgentFile)
 			allMatch = false
 		}
 	}

@@ -32,7 +32,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
-          cache: 'yarn'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
       
       # Playwright 浏览器缓存
       - name: Get Playwright version
@@ -57,7 +58,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       
       - name: Install Node dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci --no-audit --no-fund
       
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
@@ -71,12 +72,12 @@ jobs:
         run: go install github.com/kira1928/osrp-stream-tester/cmd/stream-tester@latest
       
       - name: Build Web frontend
-        run: make build-web
+        run: |
+          npm --prefix src/webapp ci --no-audit --no-fund
+          npm --prefix src/webapp run build
       
       - name: Build bililive-go with dev tag
-        run: |
-          mkdir -p bin
-          go build -tags dev -o bin/bililive-dev ./src/cmd/bililive
+        run: go run ./build.go dev-incremental
       
       - name: Create test output directory
         run: mkdir -p test-output

@@ -79,7 +79,7 @@ printf "%s\n" "$TARGETS" | while IFS= read -r dist; do
   platform="${dist%/*}"
   arch="${dist#*/}"
   echo "[build] PLATFORM=$platform ARCH=$arch"
-  make PLATFORM="$platform" ARCH="$arch" bililive
+  PLATFORM="$platform" ARCH="$arch" go run ./build.go release
 done
 
 for file in $(ls $BIN_PATH); do

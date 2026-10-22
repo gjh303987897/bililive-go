@@ -1,17 +1,21 @@
 language: go
 sudo: required
 go:
-  - "1.16.5"
+  - "1.25"
 env:
-  - GO111MODULE=on NODE_VERSION=16.3.0
+  - GO111MODULE=on NODE_VERSION=20.10.0
 before_install:
   - nvm install $NODE_VERSION
 script:
-  - make build-web bililive
-  - make test
+  - npm ci --no-audit --no-fund
+  - npm --prefix src/webapp ci --no-audit --no-fund
+  - npm --prefix src/webapp run build
+  - go run ./build.go release
+  - go run ./build.go test
 before_deploy:
   - go install github.com/golang/mock/mockgen@v1.6.0
-  - make release
+  - go run ./build.go generate
+  - ./src/hack/release.sh
 deploy:
   provider: releases
   api_key:
@@ -30,4 +34,4 @@ after_deploy:
   - docker run --rm --privileged multiarch/qemu-user-static:register --reset -p yes
   - docker buildx create --name xbuilder --use
   - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
-  - make release-docker
+  - ./src/hack/release-docker.sh

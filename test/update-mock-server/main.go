@@ -110,7 +110,7 @@ func prepareUpdatePackage() error {
 
 	// 检查源文件是否存在
 	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		return fmt.Errorf("源文件不存在: %s\n请先运行 make dev-incremental 构建开发版本", srcPath)
+		return fmt.Errorf("源文件不存在: %s\n请先运行 go run ./build.go dev-incremental 构建开发版本", srcPath)
 	}
 
 	// 确定输出文件名

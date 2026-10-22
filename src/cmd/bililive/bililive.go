@@ -180,7 +180,7 @@ var (
 	// SentryEnv Sentry Environment (编译时注入)
 	SentryEnv = "production"
 	// DisableTelemetry 禁用遥测统计（编译时注入）
-	// 使用 NO_TELEMETRY=1 make dev 或 -ldflags="-X main.DisableTelemetry=1" 注入
+	// 使用 NO_TELEMETRY=1 go run ./build.go dev 或 -ldflags="-X main.DisableTelemetry=1" 注入
 	// 用于本地开发/测试，避免污染生产统计数据
 	DisableTelemetry = ""
 )

@@ -10,11 +10,11 @@ import {
     ToolOutlined,
     MenuFoldOutlined,
     MenuUnfoldOutlined,
-    LineChartOutlined,
     CloudUploadOutlined,
     CalendarOutlined,
     CommentOutlined
 } from '@ant-design/icons';
+import LineChartOutlined from '@ant-design/icons/LineChartOutlined';
 import './layout.css';
 
 const { Header, Content, Sider } = Layout;

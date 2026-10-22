@@ -27,8 +27,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: 'src/webapp/package-lock.json'
       - name: Build
-        run: make build-web bililive
+        run: |
+          npm --prefix src/webapp ci --no-audit --no-fund
+          npm --prefix src/webapp run build
+          go run ./build.go release
   test:
     needs: go-cache
     runs-on: ubuntu-latest
@@ -45,13 +50,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: 'src/webapp/package-lock.json'
       - name: Install FFmpeg test dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
           ffmpeg -version
       - name: Test
-        run: make build-web test
+        run: |
+          npm --prefix src/webapp ci --no-audit --no-fund
+          npm --prefix src/webapp run build
+          go run ./build.go test
       - name: Codecov
         uses: codecov/codecov-action@v2
   lint:
@@ -87,4 +97,4 @@ jobs:
           cache: true
           cache-dependency-path: '**/go.sum'
       - name: Check AI instruction files consistency
-        run: make check-agents
+        run: go run ./build.go check-agents

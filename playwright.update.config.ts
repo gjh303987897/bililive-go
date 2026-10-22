@@ -8,7 +8,7 @@ import * as path from 'path';
  * 此配置文件用于运行需要 update-mock-server 的完整升级测试。
  * 
  * 使用方法:
- * 1. 首先构建开发版本: make dev-incremental
+ * 1. 首先构建开发版本: go run ./build.go dev-incremental
  * 2. 运行测试: npx playwright test --config=playwright.update.config.ts
  */
 

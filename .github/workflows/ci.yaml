@@ -36,7 +36,7 @@ jobs:
         with:
           path: |
             src/webapp/build
-          key: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.node-version', 'src/webapp/yarn.lock', 'src/webapp/package.json', 'src/webapp/tsconfig.json', 'src/webapp/src/**', 'src/webapp/public/**') }}
+          key: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.node-version', 'src/webapp/package-lock.json', 'src/webapp/package.json', 'src/webapp/tsconfig.json', 'src/webapp/src/**', 'src/webapp/public/**') }}
 
       - name: Web build cache hit — end early
         if: ${{ steps.cache_web_build.outputs.cache-hit == 'true' && github.event.inputs.is_force != 'true' }}  
@@ -46,8 +46,8 @@ jobs:
         if: ${{ steps.cache_web_build.outputs.cache-hit != 'true' && github.event.inputs.is_force != 'true'  }}
         with:
             node-version-file: '.node-version'
-            cache: yarn
-            cache-dependency-path: 'src/webapp/yarn.lock'
+            cache: npm
+            cache-dependency-path: 'src/webapp/package-lock.json'
 
       - uses: actions/setup-go@v6
         if: ${{ steps.cache_web_build.outputs.cache-hit != 'true' && github.event.inputs.is_force != 'true' }}
@@ -58,7 +58,9 @@ jobs:
 
       - name: Build Web Page
         if: ${{ steps.cache_web_build.outputs.cache-hit != 'true' || github.event.inputs.is_force == 'true' }}
-        run: make build-web
+        run: |
+          npm --prefix src/webapp ci --no-audit --no-fund
+          npm --prefix src/webapp run build
 
       - name: Save built web to cache (src/webapp/build)
         if: ${{ steps.cache_web_build.outputs.cache-hit != 'true' && github.event.inputs.is_force != 'true' }}
@@ -66,4 +68,4 @@ jobs:
         with:
           path: |
             src/webapp/build
-          key: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.node-version', 'src/webapp/yarn.lock', 'src/webapp/package.json', 'src/webapp/tsconfig.json', 'src/webapp/src/**', 'src/webapp/public/**') }}
+          key: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.node-version', 'src/webapp/package-lock.json', 'src/webapp/package.json', 'src/webapp/tsconfig.json', 'src/webapp/src/**', 'src/webapp/public/**') }}

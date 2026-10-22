@@ -342,13 +342,13 @@ choco install ffmpeg
 
 ```bash
 # 安装依赖（首次）
-make install-e2e
+go run ./build.go install-e2e
 
 # 运行测试
-make test-e2e
+go run ./build.go test-e2e
 
 # 带 UI 运行测试（调试用）
-make test-e2e-ui
+go run ./build.go test-e2e-ui
 ```
 
 ### 测试配置

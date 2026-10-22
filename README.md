@@ -218,28 +218,21 @@ NAS 用户使用系统自带 GUI 创建 docker compose 的情况请参考群晖�
 | 工具 | 版本要求 | 说明 |
 |------|----------|------|
 | [Go](https://golang.org/dl/) | 1.25+ | 后端开发语言 |
-| [GNU Make](https://www.gnu.org/software/make/) | 4.0+ | 构建工具（见下方安装说明） |
-| [Node.js](https://nodejs.org/) | 18+ | 前端构建 |
+| [Node.js](https://nodejs.org/) | 20.10.0 | 前端构建，版本固定于 `.node-version` |
+| npm | 随 Node.js 安装 | 前端包管理与脚本执行 |
+| [golangci-lint](https://golangci-lint.run/) | 2.x | Go 静态代码检查 |
 | [Git](https://git-scm.com/) | - | 版本控制 |
 | [FFmpeg](https://ffmpeg.org/) | - | 可选，用于视频处理（程序会自动下载） |
 
-### 安装 GNU Make
+项目统一使用 npm 管理前端依赖，并通过 `go run ./build.go` 执行构建和测试任务。无需安装 GNU Make 或 Yarn。
 
-**Windows（推荐 Scoop）：**
-```powershell
-# 安装 Scoop（如果没有）
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+请使用 nvm、fnm 等 Node.js 版本管理器切换到 `.node-version` 指定的版本：
 
-# 安装 Make
-scoop install make
+```bash
+nvm use
+# 或
+fnm use
 ```
-
-> ⚠️ Windows 上的 GnuWin32 Make（3.81）版本过旧，会导致编码问题。请使用 Scoop 或 Chocolatey 安装新版。
-
-**macOS：** 系统自带 Make，或 `brew install make`
-
-**Linux：** `sudo apt install make`（Debian/Ubuntu）
 
 ### 快速开始
 
@@ -251,13 +244,30 @@ cd bililive-go
 # 2. 安装开发工具（delve 调试器、gopls 语言服务器等）
 go generate ./tools/devtools.go
 
-# 3. 安装前端依赖并构建
-cd src/webapp && npm install && cd ../..
+# 3. 安装前端依赖并构建页面
 go run ./build.go build-web
 
-# 4. 运行开发版本
+# 4. 构建后端开发版本
 go run ./build.go dev
 ```
+
+构建完成后，运行 `bin/bililive-windows-amd64.exe`（Windows）或对应的 `bin/bililive-*` 文件。
+
+### 前端开发
+
+只开发前端时，可以启动 React 开发服务器。开发服务器会把 API 请求代理到 `http://127.0.0.1:8080/`：
+
+```bash
+# 安装依赖
+npm --prefix src/webapp ci
+
+# 启动前端开发服务器
+npm --prefix src/webapp start
+```
+
+修改依赖后使用 `npm --prefix src/webapp install` 更新 `package-lock.json`，CI 和日常安装统一使用 `npm ci`。
+
+根目录的 `package-lock.json` 用于 Playwright E2E 测试，`src/webapp/package-lock.json` 用于前端依赖，两者都需要提交。
 
 ### 使用 VSCode 开发
 
@@ -294,29 +304,39 @@ cp .vscode/tasks.example.json .vscode/tasks.json
 
 详细的调试配置说明见 [test/README.md](test/README.md)。
 
-### 构建命令
+### 开发命令
 
-项目支持两种构建方式：`go run ./build.go` 和 `make`。
+项目统一使用 `go run ./build.go` 执行构建和测试任务，前端依赖使用 npm 管理。
 
-| 功能 | go run 方式 | make 方式 |
-|------|-------------|-----------|
-| 查看帮助 | `go run ./build.go help` | `make help` |
-| 开发构建 | `go run ./build.go dev` | `make dev` |
-| 发布构建 | `go run ./build.go release` | `make build` |
-| 构建前端 | `go run ./build.go build-web` | `make build-web` |
-| 运行测试 | `go run ./build.go test` | `make test` |
-| 代码生成 | `go run ./build.go generate` | `make generate` |
-| 代码检查 | - | `make lint` |
-| 清理产物 | - | `make clean` |
-| E2E 测试 | - | `make test-e2e` |
-| E2E 测试 (UI) | - | `make test-e2e-ui` |
-| 查看测试报告 | - | `make show-report` |
+| 功能 | 命令 |
+|------|------|
+| 查看帮助 | `go run ./build.go --help` |
+| 安装前端依赖 | `npm --prefix src/webapp ci` |
+| 更新前端依赖 | `npm --prefix src/webapp install` |
+| 启动前端开发服务器 | `npm --prefix src/webapp start` |
+| 开发构建 | `go run ./build.go dev` |
+| 发布构建 | `go run ./build.go release` |
+| 构建前端 | `go run ./build.go build-web` |
+| 运行测试 | `go run ./build.go test` |
+| 代码生成 | `go run ./build.go generate` |
+| 代码检查 | `go run ./build.go lint` |
+| 清理产物 | `go run ./build.go clean` |
+| 安装 E2E 依赖 | `go run ./build.go install-e2e` |
+| E2E 测试 | `go run ./build.go test-e2e` |
+| E2E 测试 (UI) | `go run ./build.go test-e2e-ui` |
+| 查看测试报告 | `go run ./build.go show-report` |
 
 ```bash
 # 示例：开发构建
 go run ./build.go dev
-# 或
-make dev
+```
+
+提交代码前至少执行以下检查：
+
+```bash
+npm --prefix src/webapp run build
+go run ./build.go lint
+go run ./build.go test
 ```
 
 ### E2E 测试报告
@@ -325,10 +345,10 @@ make dev
 
 ```bash
 # 方式一：使用 Playwright 内置服务器（推荐，支持源码查看）
-make show-report
+go run ./build.go show-report
 
 # 方式二：启动在线报告服务器（适合团队分享，可从 GitHub 获取源码）
-make serve-report COMMIT=0.8.0/dev
+go run ./build.go serve-report --commit 0.8.0/dev
 # 然后访问 http://localhost:9323
 ```
 

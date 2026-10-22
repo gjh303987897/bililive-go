@@ -56,7 +56,7 @@ bililive-go 的自动更新流程涉及以下组件：
 
 ```bash
 # 先构建开发版本作为"新版本"的源文件
-make dev-incremental
+go run ./build.go dev-incremental
 
 # 启动 Mock 服务器
 go run ./test/update-mock-server -port 8888 -version 99.0.0

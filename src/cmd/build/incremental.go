@@ -22,7 +22,7 @@ func getDevBinaryName() string {
 }
 
 // BuildDevIncremental 增量构建：只在源码变化时重新编译
-// 使用类似 make 的方式比较文件修改时间，而不是计算校验和
+// 通过比较文件修改时间判断是否需要编译，而不是计算校验和
 // 输出到 bin/bililive-dev[.exe]，便于跨平台调试
 // 返回 true 表示进行了编译，false 表示跳过
 func BuildDevIncremental() bool {

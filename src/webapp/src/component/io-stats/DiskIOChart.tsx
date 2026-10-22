@@ -124,57 +124,59 @@ const DiskIOChart: React.FC<Props> = ({ data }) => {
       </Space>
 
       <ResponsiveContainer width="100%" height={400}>
-        <LineChart
-          data={chartData}
-          margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis
-            dataKey="time"
-            tick={{ fontSize: 12 }}
-            stroke="#999"
-          />
-          <YAxis
-            tickFormatter={(value) => {
-              if (value >= 1024 * 1024) {
-                return `${(value / (1024 * 1024)).toFixed(0)} MB/s`;
-              } else if (value >= 1024) {
-                return `${(value / 1024).toFixed(0)} KB/s`;
-              }
-              return `${value} B/s`;
-            }}
-            tick={{ fontSize: 12 }}
-            stroke="#999"
-          />
-          <Tooltip
-            formatter={(value, name) => {
-              const numValue = typeof value === 'number' ? value : parseFloat(String(value));
-              return [formatSpeed(numValue), String(name)];
-            }}
-            labelFormatter={(label) => `时间: ${label}`}
-            contentStyle={{
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              border: '1px solid #d9d9d9',
-              borderRadius: 4,
-            }}
-          />
-          <Legend />
-          {Object.entries(STAT_TYPES).map(([key, config]) =>
-            visibleTypes.has(key as StatTypeKey) && (
-              <Line
-                key={key}
-                type="monotone"
-                dataKey={key}
-                name={config.name}
-                stroke={config.color}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 6 }}
-                connectNulls
-              />
-            )
-          )}
-        </LineChart>
+        {(
+          <LineChart
+            data={chartData}
+            margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis
+              dataKey="time"
+              tick={{ fontSize: 12 }}
+              stroke="#999"
+            />
+            <YAxis
+              tickFormatter={(value) => {
+                if (value >= 1024 * 1024) {
+                  return `${(value / (1024 * 1024)).toFixed(0)} MB/s`;
+                } else if (value >= 1024) {
+                  return `${(value / 1024).toFixed(0)} KB/s`;
+                }
+                return `${value} B/s`;
+              }}
+              tick={{ fontSize: 12 }}
+              stroke="#999"
+            />
+            <Tooltip
+              formatter={(value, name) => {
+                const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+                return [formatSpeed(numValue), String(name)];
+              }}
+              labelFormatter={(label) => `时间: ${label}`}
+              contentStyle={{
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                border: '1px solid #d9d9d9',
+                borderRadius: 4,
+              }}
+            />
+            <Legend />
+            {Object.entries(STAT_TYPES).map(([key, config]) =>
+              visibleTypes.has(key as StatTypeKey) && (
+                <Line
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
+                  name={config.name}
+                  stroke={config.color}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 6 }}
+                  connectNulls
+                />
+              )
+            )}
+          </LineChart>
+        ) as React.ReactNode}
       </ResponsiveContainer>
     </div>
   );

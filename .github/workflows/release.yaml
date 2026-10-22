@@ -65,26 +65,30 @@ jobs:
         with:
           path: |
             src/webapp/build
-          key: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles( '.node-version', 'src/webapp/yarn.lock', 'src/webapp/package.json', 'src/webapp/tsconfig.json', 'src/webapp/src/**', 'src/webapp/public/**') }}
+          key: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles( '.node-version', 'src/webapp/package-lock.json', 'src/webapp/package.json', 'src/webapp/tsconfig.json', 'src/webapp/src/**', 'src/webapp/public/**') }}
       - name: Setup Node.js (fallback if cache miss)
         if: ${{ steps.cache_web_build_restore.outputs.cache-hit != 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
-          cache: yarn
-          cache-dependency-path: 'src/webapp/yarn.lock'
+          cache: npm
+          cache-dependency-path: 'src/webapp/package-lock.json'
       - name: Build Web Page (fallback if cache miss)
         if: ${{ steps.cache_web_build_restore.outputs.cache-hit != 'true' }}
-        run: make build-web
+        run: |
+          npm --prefix src/webapp ci --no-audit --no-fund
+          npm --prefix src/webapp run build
       - name: Save web build cache
         if: ${{ steps.cache_web_build_restore.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: |
             src/webapp/build
-          key: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles( '.node-version', 'src/webapp/yarn.lock', 'src/webapp/package.json', 'src/webapp/tsconfig.json', 'src/webapp/src/**', 'src/webapp/public/**') }}
+          key: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles( '.node-version', 'src/webapp/package-lock.json', 'src/webapp/package.json', 'src/webapp/tsconfig.json', 'src/webapp/src/**', 'src/webapp/public/**') }}
       - name: Build go binaries (shard ${{ matrix.shard_index }}/10)
-        run: make release-no-web
+        run: |
+          go run ./build.go generate
+          ./src/hack/release.sh
       - name: Upload packaged artifacts only
         uses: actions/upload-artifact@v4
         with:

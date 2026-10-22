@@ -40,6 +40,7 @@ on_record_finished:
     upload_path_tmpl: /录播归档/{{ .Platform }}/{{ .HostName }}/{{ .FileName }}
     delete_after_upload: false
     delete_all_after_upload: false
+    upload_subtitles: false
   upload_timing: after_process
   burn_subtitles: false
   burn_subtitles_codec: libx264
@@ -56,14 +57,16 @@ danmaku:
   scroll_time: 10
   resolution: 1920x1080
   outline: 1
-  opacity: 128
+  opacity: 255
   record_gift: true
   record_douyu_gift: true
   record_douyin_gift: true
   record_guard: true
   record_super_chat: true
+  show_username: false
   guard_position: bottom-left
   sc_position: bottom-left
+danmaku_opacity_migrated: true
 live_rooms:
   # quality参数目前仅B站启用，默认为0
   # (B站)0代表原画PRO(HEVC)优先, 其他数值为原画(AVC)
@@ -154,3 +157,13 @@ update:
   check_interval_hours: 6
   auto_download: true
   include_prerelease: false
+platform_configs:
+  bilibili:
+    danmaku:
+      font_size: 0
+      font_name: ""
+      scroll_area: ""
+      scroll_time: 0
+      resolution: ""
+      opacity: 255
+    name: ""

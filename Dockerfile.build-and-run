@@ -3,11 +3,9 @@ FROM golang:1.25.0-bullseye AS builder
 
 WORKDIR /build
 
-#安装tar解压xz需要的xz-utils和构建web页面所需的yarn
-RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -  && \
-    echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list  && \
-    apt-get update  && \
-    apt-get install -y yarn  xz-utils
+# 安装解压 xz 所需的工具
+RUN apt-get update && \
+    apt-get install -y xz-utils
 
 
 #根据架构安装构建web页面所需的node.js
@@ -19,18 +17,19 @@ RUN ARCH=$(uname -m) && \
     else \
     echo '不支持的架构: $ARCH'; \
     fi && \
-    wget https://nodejs.org/dist/v18.20.3/node-v18.20.3-linux-${NODE_ARCH}.tar.xz && \
-    tar Jxvf /build/node-v18.20.3-linux-${NODE_ARCH}.tar.xz && \
+    wget https://nodejs.org/dist/v20.10.0/node-v20.10.0-linux-${NODE_ARCH}.tar.xz && \
+    tar Jxvf /build/node-v20.10.0-linux-${NODE_ARCH}.tar.xz && \
     rm -rf /usr/bin/node /usr/bin/npm && \
-    ln -s /build/node-v18.20.3-linux-${NODE_ARCH}/bin/node /usr/bin/node && \
-    ln -s /build/node-v18.20.3-linux-${NODE_ARCH}/bin/npm /usr/bin/npm
+    ln -s /build/node-v20.10.0-linux-${NODE_ARCH}/bin/node /usr/bin/node && \
+    ln -s /build/node-v20.10.0-linux-${NODE_ARCH}/bin/npm /usr/bin/npm
 
 COPY . .
 
 #配置golang编译环境并进行构建
 RUN go env -w GO111MODULE=on && \
-    make build-web && \
-    make
+    npm --prefix src/webapp ci --no-audit --no-fund && \
+    npm --prefix src/webapp run build && \
+    go run ./build.go release
 
 RUN sh -c "/build/bin/bililive* --version"
 
