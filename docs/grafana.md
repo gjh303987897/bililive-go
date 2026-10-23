@@ -1,5 +1,8 @@
 # 三合一简化安装，原本的文档太晦涩了。
 
+> 内置的 `监控面板` 页面已经覆盖直播状态、码率、文件大小、开播时长和系统资源，不依赖 Prometheus / Grafana。
+> 本文档用于需要长期存储、跨实例聚合或告警场景的可选部署。
+
 ## 安装
 1. clone repo
 >$ git clone https://github.com/bililive-go/bililive-go.git

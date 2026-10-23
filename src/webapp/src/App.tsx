@@ -8,6 +8,7 @@ import ConfigInfo from './component/config-info/index';
 import FileList from './component/file-list/index';
 import TaskPage from './component/task-page/index';
 import IOStats from './component/io-stats/index';
+import Dashboard from './component/dashboard/index';
 import UpdateBanner from './component/update-banner/index';
 import FFmpegBanner from './component/ffmpeg-banner/index';
 import UpdatePage from './component/update-page/index';
@@ -22,6 +23,7 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/update/*" element={<UpdatePage />} />
           <Route path="/iostats/*" element={<IOStats />} />
+          <Route path="/dashboard/*" element={<Dashboard />} />
           <Route path="/tasks/*" element={<TaskPage />} />
           <Route path="/fileList/*" element={<FileList />} />
           <Route path="/danmaku" element={<DanmakuSettings />} />

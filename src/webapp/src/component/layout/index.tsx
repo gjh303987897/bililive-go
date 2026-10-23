@@ -12,14 +12,15 @@ import {
     MenuUnfoldOutlined,
     CloudUploadOutlined,
     CalendarOutlined,
-    CommentOutlined
+    CommentOutlined,
+    ThunderboltOutlined
 } from '@ant-design/icons';
 import LineChartOutlined from '@ant-design/icons/LineChartOutlined';
 import './layout.css';
 
 const { Header, Content, Sider } = Layout;
-// 功能开关：IO 统计（开发中，设为 false 隐藏 UI）
-const ENABLE_IO_STATS_UI = false;
+// 功能开关：IO 统计（面板明细页）
+const ENABLE_IO_STATS_UI = true;
 
 interface Props {
     children?: React.ReactNode;
@@ -27,10 +28,32 @@ interface Props {
 
 interface State {
     collapsed: boolean;
+    selectedKey: string;
 }
 
 // localStorage key 用于保存侧边栏收起状态
 const SIDER_COLLAPSED_KEY = 'siderCollapsed';
+
+const ROUTE_KEYS: Record<string, string> = {
+    '/dashboard': 'dashboard',
+    '/': '1',
+    '/liveInfo': '2',
+    '/configInfo': '3',
+    '/danmaku': 'danmaku',
+    '/fileList': '4',
+    '/tasks': 'tasks',
+    '/scheduler': 'scheduler',
+    '/iostats': 'iostats',
+    '/update': 'update',
+};
+
+const selectedKeyFromHash = (): string => {
+    const path = window.location.hash.replace(/^#/, '') || '/';
+    const match = Object.keys(ROUTE_KEYS)
+        .filter((route) => route !== '/' && path.startsWith(route))
+        .sort((a, b) => b.length - a.length)[0];
+    return match ? ROUTE_KEYS[match] : '1';
+};
 
 class RootLayout extends React.Component<Props, State> {
     constructor(props: Props) {
@@ -45,8 +68,23 @@ class RootLayout extends React.Component<Props, State> {
         } catch (e) {
             console.error('读取侧边栏状态失败:', e);
         }
-        this.state = { collapsed };
+        this.state = { collapsed, selectedKey: selectedKeyFromHash() };
     }
+
+    componentDidMount() {
+        window.addEventListener('hashchange', this.syncSelectedKey);
+    }
+
+    componentWillUnmount() {
+        window.removeEventListener('hashchange', this.syncSelectedKey);
+    }
+
+    syncSelectedKey = () => {
+        const selectedKey = selectedKeyFromHash();
+        if (selectedKey !== this.state.selectedKey) {
+            this.setState({ selectedKey });
+        }
+    };
 
     toggleCollapsed = () => {
         const collapsed = !this.state.collapsed;
@@ -100,10 +138,15 @@ class RootLayout extends React.Component<Props, State> {
                             </div>
                             <Menu
                                 mode="inline"
-                                defaultSelectedKeys={['1']}
+                                selectedKeys={[this.state.selectedKey]}
                                 inlineCollapsed={collapsed}
                                 style={{ borderRight: 0 }}
                                 items={[
+                                    {
+                                        key: 'dashboard',
+                                        icon: <ThunderboltOutlined />,
+                                        label: <Link to="/dashboard">监控面板</Link>,
+                                    },
                                     {
                                         key: '1',
                                         icon: <MonitorOutlined />,
