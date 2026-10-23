@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Badge,
   Button,
   Card,
+  Col,
   Empty,
   Popconfirm,
   Progress,
+  Row,
   Space,
   Spin,
   Table,
@@ -79,11 +80,44 @@ const fileNames = (task: QueueTask): string =>
 
 const formatTime = (value: string): string => (value ? dayjs(value).format('MM-DD HH:mm:ss') : '-');
 
+const REFRESH_SECONDS = 5;
+
+interface StatCardProps {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  tone: 'blue' | 'red' | 'amber' | 'green';
+}
+
+const StatCard: React.FC<StatCardProps> = ({ icon, label, value, tone }) => (
+  <Card size="small" className={`queue-stat queue-stat-${tone}`}>
+    <span className="queue-stat-icon">{icon}</span>
+    <div>
+      <div className="queue-stat-value" key={value}>{value}</div>
+      <div className="queue-stat-label">{label}</div>
+    </div>
+  </Card>
+);
+
+const statusTag = (task: QueueTask) => {
+  if (task.status === 'running') {
+    return (
+      <Tag color="processing" className="queue-tag-running">
+        <span className="queue-pulse" />
+        执行中
+      </Tag>
+    );
+  }
+  const tag = STATUS_TAGS[task.status] ?? STATUS_TAGS.pending;
+  return <Tag color={tag.color}>{tag.label}</Tag>;
+};
+
 const Queues: React.FC = () => {
   const [data, setData] = useState<QueueData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState<number | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(REFRESH_SECONDS);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -104,11 +138,22 @@ const Queues: React.FC = () => {
 
   useEffect(() => {
     load();
-    const timer = window.setInterval(() => {
-      if (!document.hidden) load(true);
-    }, 5000);
-    return () => window.clearInterval(timer);
   }, [load]);
+
+  // 读秒式自动刷新：可见时每秒递减，归零后静默拉取并重置。
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.hidden) return;
+      setSecondsLeft((value) => Math.max(0, value - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (secondsLeft > 0) return;
+    load(true);
+    setSecondsLeft(REFRESH_SECONDS);
+  }, [secondsLeft, load]);
 
   const act = useCallback(async (task: QueueTask, action: 'retry' | 'cancel' | 'delete') => {
     setActing(task.id);
@@ -168,15 +213,14 @@ const Queues: React.FC = () => {
       title: '状态',
       key: 'status',
       width: 150,
-      render: (_, task) => {
-        const tag = STATUS_TAGS[task.status] ?? STATUS_TAGS.pending;
-        return (
-          <Space direction="vertical" size={0}>
-            <Tag color={tag.color}>{tag.label}</Tag>
-            {task.status === 'running' && <Progress percent={task.progress} size="small" />}
-          </Space>
-        );
-      },
+      render: (_, task) => (
+        <Space direction="vertical" size={0}>
+          {statusTag(task)}
+          {task.status === 'running' && (
+            <Progress percent={task.progress} size="small" className="queue-progress" />
+          )}
+        </Space>
+      ),
     },
     {
       title: '创建时间',
@@ -257,21 +301,39 @@ const Queues: React.FC = () => {
     [data],
   );
 
+  const runningCount = useMemo(
+    () => [...(data?.transcode_waiting ?? []), ...(data?.upload_pending ?? [])]
+      .filter((task) => task.status === 'running').length,
+    [data],
+  );
+
   return (
     <div className="queues-page">
       <Card size="small" className="queues-toolbar">
-        <Space wrap>
+        <div className="queues-toolbar-row">
+          <Space>
+            <span className={`queues-live-dot${runningCount > 0 ? ' is-active' : ''}`} />
+            <Text strong>队列处理</Text>
+            <Text type="secondary">每 {secondsLeft} 秒自动刷新</Text>
+          </Space>
           <Button icon={<ReloadOutlined />} loading={loading} onClick={() => load()}>刷新</Button>
-          <Text type="secondary">自动刷新 5 秒</Text>
-          {data && (
-            <Space size="large">
-              <Badge status="processing" text={`等待转码 ${data.transcode_waiting.length}`} />
-              <Badge status="error" text={`转码失败 ${data.transcode_failed.length}`} />
-              <Badge status="warning" text={`上传 ${uploadQueue.length}`} />
-            </Space>
-          )}
-        </Space>
+        </div>
       </Card>
+
+      <Row gutter={12} className="queues-stats">
+        <Col xs={12} md={6}>
+          <StatCard icon={<SyncOutlined spin={runningCount > 0} />} label="等待转码" value={data?.transcode_waiting.length ?? 0} tone="blue" />
+        </Col>
+        <Col xs={12} md={6}>
+          <StatCard icon={<WarningOutlined />} label="转码失败" value={data?.transcode_failed.length ?? 0} tone="red" />
+        </Col>
+        <Col xs={12} md={6}>
+          <StatCard icon={<CloudUploadOutlined />} label="待上传" value={uploadQueue.length} tone="amber" />
+        </Col>
+        <Col xs={12} md={6}>
+          <StatCard icon={<CheckCircleOutlined />} label="最近完成" value={data?.upload_completed.length ?? 0} tone="green" />
+        </Col>
+      </Row>
 
       {error && (
         <Alert type="error" showIcon closable message="队列加载失败" description={error} onClose={() => setError(null)} className="queues-alert" />
@@ -292,7 +354,7 @@ const Queues: React.FC = () => {
           items={[
             {
               key: 'transcode-waiting',
-              label: <span><SyncOutlined />等待转码</span>,
+              label: <span><SyncOutlined spin={runningCount > 0} /> 等待转码 <span className="queue-tab-count">{data?.transcode_waiting.length ?? 0}</span></span>,
               children: (
                 <Card size="small">
                   <Table
@@ -300,6 +362,7 @@ const Queues: React.FC = () => {
                     rowKey="id"
                     dataSource={data?.transcode_waiting ?? []}
                     columns={waitingColumns}
+                    rowClassName={() => 'queue-row'}
                     pagination={{ pageSize: 20, hideOnSinglePage: true }}
                     locale={{ emptyText: <Empty description="没有等待转码的任务" /> }}
                   />
@@ -308,7 +371,7 @@ const Queues: React.FC = () => {
             },
             {
               key: 'transcode-failed',
-              label: <span><WarningOutlined />转码失败</span>,
+              label: <span><WarningOutlined /> 转码失败 <span className="queue-tab-count is-error">{data?.transcode_failed.length ?? 0}</span></span>,
               children: (
                 <Card
                   size="small"
@@ -324,6 +387,7 @@ const Queues: React.FC = () => {
                     rowKey="id"
                     dataSource={data?.transcode_failed ?? []}
                     columns={failedColumns}
+                    rowClassName={() => 'queue-row'}
                     pagination={{ pageSize: 20, hideOnSinglePage: true }}
                     locale={{ emptyText: <Empty description="没有转码失败的任务" /> }}
                   />
@@ -332,7 +396,7 @@ const Queues: React.FC = () => {
             },
             {
               key: 'upload',
-              label: <span><CloudUploadOutlined />上传队列</span>,
+              label: <span><CloudUploadOutlined /> 上传队列 <span className="queue-tab-count is-warn">{uploadQueue.length}</span></span>,
               children: (
                 <>
                   <Card size="small" title="待上传 / 上传失败" className="queues-card">
@@ -341,6 +405,7 @@ const Queues: React.FC = () => {
                       rowKey="id"
                       dataSource={uploadQueue}
                       columns={failedColumns}
+                      rowClassName={() => 'queue-row'}
                       pagination={{ pageSize: 20, hideOnSinglePage: true }}
                       locale={{ emptyText: <Empty description={data?.upload_enabled ? '没有待上传任务' : '远程上传未启用'} /> }}
                     />

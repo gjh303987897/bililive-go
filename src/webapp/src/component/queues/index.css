@@ -1,15 +1,197 @@
 .queues-page {
     padding: 8px;
+    animation: queue-page-in 0.35s ease-out both;
 }
 
 .queues-toolbar {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
+.queues-toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.queues-live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #bfbfbf;
+    display: inline-block;
+}
+
+.queues-live-dot.is-active {
+    background: #52c41a;
+    animation: queue-pulse 1.6s ease-in-out infinite;
+}
+
+.queues-stats {
+    margin-bottom: 4px;
+}
+
+.queue-stat {
+    overflow: hidden;
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.queue-stat::after {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: currentColor;
+    opacity: 0.7;
+}
+
+.queue-stat:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+.queue-stat .ant-card-body {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+}
+
+.queue-stat-icon {
+    font-size: 20px;
+    opacity: 0.85;
+}
+
+.queue-stat-value {
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    animation: queue-pop 0.3s ease-out;
+}
+
+.queue-stat-label {
+    font-size: 12px;
+    color: #8c8c8c;
+}
+
+.queue-stat-blue { color: #1677ff; }
+.queue-stat-red { color: #ff4d4f; }
+.queue-stat-amber { color: #faad14; }
+.queue-stat-green { color: #52c41a; }
+
 .queues-alert {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
 .queues-card {
     margin-bottom: 16px;
+}
+
+.queue-tab-count {
+    display: inline-block;
+    min-width: 20px;
+    padding: 0 6px;
+    margin-left: 4px;
+    border-radius: 10px;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+    background: rgba(22, 119, 255, 0.12);
+    color: #1677ff;
+    transition: background 0.2s ease;
+}
+
+.queue-tab-count.is-error {
+    background: rgba(255, 77, 79, 0.12);
+    color: #ff4d4f;
+}
+
+.queue-tab-count.is-warn {
+    background: rgba(250, 173, 20, 0.15);
+    color: #d48806;
+}
+
+.queue-row {
+    animation: queue-row-in 0.28s ease-out both;
+}
+
+.queue-row:nth-child(2) { animation-delay: 0.02s; }
+.queue-row:nth-child(3) { animation-delay: 0.04s; }
+.queue-row:nth-child(4) { animation-delay: 0.06s; }
+.queue-row:nth-child(5) { animation-delay: 0.08s; }
+.queue-row:nth-child(6) { animation-delay: 0.1s; }
+.queue-row:nth-child(n+7) { animation-delay: 0.12s; }
+
+.queue-row td {
+    transition: background 0.15s ease;
+}
+
+.queue-tag-running {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.queue-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #1677ff;
+    color: #1677ff;
+    animation: queue-pulse 1.2s ease-in-out infinite;
+}
+
+.queue-progress .ant-progress-bg {
+    background-image: linear-gradient(90deg, #1677ff, #69b1ff, #1677ff);
+    background-size: 200% 100%;
+    animation: queue-shimmer 1.4s linear infinite;
+}
+
+/* 空状态轻微浮动 */
+.queues-page .ant-empty-image {
+    animation: queue-float 3s ease-in-out infinite;
+}
+
+@keyframes queue-page-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes queue-row-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes queue-pop {
+    0% { transform: scale(0.85); opacity: 0.4; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes queue-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 currentColor; }
+    50% { opacity: 0.5; transform: scale(0.85); box-shadow: 0 0 0 4px transparent; }
+}
+
+@keyframes queue-shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: 0 0; }
+}
+
+@keyframes queue-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .queues-page,
+    .queue-row,
+    .queue-stat-value,
+    .queues-live-dot.is-active,
+    .queue-pulse,
+    .queue-progress .ant-progress-bg,
+    .queues-page .ant-empty-image {
+        animation: none;
+    }
 }
