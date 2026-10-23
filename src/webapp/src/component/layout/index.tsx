@@ -13,6 +13,7 @@ import {
     CloudUploadOutlined,
     CalendarOutlined,
     CommentOutlined,
+    SyncOutlined,
     ThunderboltOutlined
 } from '@ant-design/icons';
 import LineChartOutlined from '@ant-design/icons/LineChartOutlined';
@@ -42,6 +43,7 @@ const ROUTE_KEYS: Record<string, string> = {
     '/danmaku': 'danmaku',
     '/fileList': '4',
     '/tasks': 'tasks',
+    '/queues': 'queues',
     '/scheduler': 'scheduler',
     '/iostats': 'iostats',
     '/update': 'update',
@@ -181,6 +183,11 @@ class RootLayout extends React.Component<Props, State> {
                                         key: 'tasks',
                                         icon: <UnorderedListOutlined />,
                                         label: <Link to="/tasks">任务队列</Link>,
+                                    },
+                                    {
+                                        key: 'queues',
+                                        icon: <SyncOutlined />,
+                                        label: <Link to="/queues">转码/上传队列</Link>,
                                     },
                                     {
                                         key: 'scheduler',

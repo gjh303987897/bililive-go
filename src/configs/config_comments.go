@@ -32,6 +32,34 @@ func DecorateConfigNode(node *yaml.Node) {
 # 负数为非法值，程序会输出 log 提醒，并无视所设定的数值`, "")
 	}
 
+	setFieldHeadComment(root, "remote_upload", "# 转码完成后直连 WebDAV / S3 上传（独立于 OpenList）")
+	remoteNode := findNode(root, "remote_upload")
+	if remoteNode != nil {
+		setFieldComment(remoteNode, "enable", "# 是否启用；启用后转码成功会自动进入上传队列", "")
+		setFieldComment(remoteNode, "provider", "# webdav 或 s3", "")
+		setFieldComment(remoteNode, "path_tmpl", "# 远程路径模板，留空使用 /录播归档/{{ .Platform }}/{{ .HostName }}/{{ .FileName }}", "")
+		setFieldComment(remoteNode, "delete_after_upload", "# 上传成功后删除本地文件", "")
+		setFieldComment(remoteNode, "retry_limit", "# 单个文件失败重试次数", "")
+		webdavNode := findNode(remoteNode, "webdav")
+		if webdavNode != nil {
+			setFieldComment(webdavNode, "url", "# WebDAV 服务地址", "")
+			setFieldComment(webdavNode, "base_path", "# 远程根目录", "")
+			setFieldComment(webdavNode, "username", "# 用户名（可选）", "")
+			setFieldComment(webdavNode, "password", "# 密码（可选）", "")
+		}
+		s3Node := findNode(remoteNode, "s3")
+		if s3Node != nil {
+			setFieldComment(s3Node, "endpoint", "# S3 服务地址（不含协议头）", "")
+			setFieldComment(s3Node, "region", "# 区域，默认 us-east-1", "")
+			setFieldComment(s3Node, "bucket", "# 存储桶", "")
+			setFieldComment(s3Node, "base_path", "# 对象前缀", "")
+			setFieldComment(s3Node, "access_key", "# Access Key", "")
+			setFieldComment(s3Node, "secret_key", "# Secret Key", "")
+			setFieldComment(s3Node, "path_style", "# 使用 path-style 访问（MinIO 等自建服务通常需要）", "")
+			setFieldComment(s3Node, "use_ssl", "# 使用 HTTPS", "")
+		}
+	}
+
 	setFieldHeadComment(root, "notify", "# 通知服务配置")
 	notifyNode := findNode(root, "notify")
 	if notifyNode != nil {

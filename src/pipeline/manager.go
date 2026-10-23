@@ -284,6 +284,10 @@ func (m *Manager) executeTask(ctx context.Context, task *PipelineTask) {
 	// 广播任务状态变化
 	m.broadcastTaskUpdate(task)
 
+	if err == nil {
+		m.enqueueRemoteUpload(task, results)
+	}
+
 	// 原子地取出并删除回调，确保每个任务的回调至多触发一次
 	// 避免 executeTask 和 CancelTask 并发时双发回调
 	m.mu.Lock()
@@ -293,6 +297,49 @@ func (m *Manager) executeTask(ctx context.Context, task *PipelineTask) {
 	if callback != nil {
 		callback(task)
 	}
+}
+
+// enqueueRemoteUpload 在转码任务成功后，把最终视频放入独立的上传队列。
+// 已包含 remote_upload 阶段的任务不会重复入队。
+func (m *Manager) enqueueRemoteUpload(task *PipelineTask, results []StageResult) {
+	cfg := configs.GetCurrentConfig()
+	if cfg == nil || !cfg.RemoteUpload.Enable || task.Kind() == TaskKindUpload {
+		return
+	}
+	for _, stage := range task.PipelineConfig.Stages {
+		if stage.Name == StageNameRemoteUpload {
+			return
+		}
+	}
+	if len(results) == 0 {
+		return
+	}
+
+	var files []FileInfo
+	for _, file := range results[len(results)-1].OutputFiles {
+		if file.Type != FileTypeVideo || file.Deletable {
+			continue
+		}
+		if info, err := os.Stat(file.Path); err != nil || info.IsDir() {
+			continue
+		}
+		files = append(files, file)
+	}
+	if len(files) == 0 {
+		return
+	}
+
+	uploadTask := NewPipelineTask(task.RecordInfo, &PipelineConfig{
+		Stages: []StageConfig{{Name: StageNameRemoteUpload}},
+	}, files)
+	uploadTask.CanRetry = true
+	if err := m.store.CreateTask(m.ctx, uploadTask); err != nil {
+		logrus.WithError(err).WithField("task_id", task.ID).Error("failed to enqueue remote upload task")
+		return
+	}
+	logrus.WithFields(logrus.Fields{"task_id": task.ID, "upload_task_id": uploadTask.ID, "files": len(files)}).
+		Info("remote upload task enqueued")
+	m.broadcastTaskUpdate(uploadTask)
 }
 
 // broadcastTaskUpdate 广播任务更新事件
@@ -572,6 +619,11 @@ func (m *Manager) GetTask(taskID int64) (*PipelineTask, error) {
 	return m.store.GetTask(m.ctx, taskID)
 }
 
+// CreateTask 仅写入任务，不触发调度（测试与批量导入使用）。
+func (m *Manager) CreateTask(task *PipelineTask) error {
+	return m.store.CreateTask(m.ctx, task)
+}
+
 // ListTasks 列出任务
 func (m *Manager) ListTasks(filter TaskFilter) ([]*PipelineTask, error) {
 	return m.store.ListTasks(m.ctx, filter)
@@ -666,12 +718,12 @@ func (m *Manager) EnqueueUploadTask(absPaths []string) (enqueued int, skipped []
 			{
 				Name: StageNameCloudUpload,
 				Options: map[string]any{
-					OptionStorage:        cu.StorageName,
-					OptionPathTemplate:   cu.UploadPathTmpl,
-					OptionDeleteAfter:    cu.DeleteAfterUpload,
-					OptionDeleteAllAfter: cu.DeleteAllAfterUpload,
-					OptionUploadTiming:   "after_process", // 手动上传无后续处理阶段，始终允许删除标记（不继承全局 upload_timing）
-					OptionFileTypes:      []string{string(FileTypeVideo), string(FileTypeCover)},
+					OptionStorage:         cu.StorageName,
+					OptionPathTemplate:    cu.UploadPathTmpl,
+					OptionDeleteAfter:     cu.DeleteAfterUpload,
+					OptionDeleteAllAfter:  cu.DeleteAllAfterUpload,
+					OptionUploadTiming:    "after_process", // 手动上传无后续处理阶段，始终允许删除标记（不继承全局 upload_timing）
+					OptionFileTypes:       []string{string(FileTypeVideo), string(FileTypeCover)},
 					OptionUploadSubtitles: cu.UploadSubtitles,
 				},
 			},
@@ -699,9 +751,9 @@ func (m *Manager) EnqueueUploadTask(absPaths []string) (enqueued int, skipped []
 
 		recordInfo := RecordInfo{
 			LiveID:      types.LiveID(ManualUploadLiveID),
-			Platform:    platform,              // 用于上传路径模板：{{ .Platform }}
-			HostName:    hostName,              // 用于上传路径模板：{{ .HostName }}
-			RoomName:    "",                    // 手动上传无房间名，不影响路径模板
+			Platform:    platform,               // 用于上传路径模板：{{ .Platform }}
+			HostName:    hostName,               // 用于上传路径模板：{{ .HostName }}
+			RoomName:    "",                     // 手动上传无房间名，不影响路径模板
 			DisplayName: filepath.Base(absPath), // 任务列表展示文件名
 			StartTime:   info.ModTime(),
 		}

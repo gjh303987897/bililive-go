@@ -19,6 +19,29 @@ const PipelineTaskUpdateEvent events.EventType = "PipelineTaskUpdate"
 // ManualUploadLiveID 手动上传任务的 LiveID 标识
 const ManualUploadLiveID = "manual-upload"
 
+// TaskKind 任务队列类型
+type TaskKind string
+
+const (
+	// TaskKindTranscode 转码/后处理任务
+	TaskKindTranscode TaskKind = "transcode"
+	// TaskKindUpload 远程上传任务
+	TaskKindUpload TaskKind = "upload"
+)
+
+// Kind 根据管道阶段判断任务所属队列。
+func (pt *PipelineTask) Kind() TaskKind {
+	if pt == nil || pt.PipelineConfig == nil {
+		return TaskKindTranscode
+	}
+	for _, stage := range pt.PipelineConfig.Stages {
+		if stage.Name == StageNameRemoteUpload {
+			return TaskKindUpload
+		}
+	}
+	return TaskKindTranscode
+}
+
 // FileType 文件类型
 type FileType string
 
@@ -261,7 +284,7 @@ type PipelineTask struct {
 	CompletedAt    *time.Time      `json:"completed_at,omitempty"`
 	ErrorMessage   string          `json:"error_message,omitempty"`
 	CanRetry       bool            `json:"can_retry"` // 是否可以重试
-	LastStageFiles []FileInfo      `json:"-"` // 最后阶段输出文件（清理前快照，不持久化）
+	LastStageFiles []FileInfo      `json:"-"`         // 最后阶段输出文件（清理前快照，不持久化）
 }
 
 // NewPipelineTask 创建新的管道任务

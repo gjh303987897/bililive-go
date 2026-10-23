@@ -167,7 +167,7 @@ func TestGetDashboardAggregatesDailyDuration(t *testing.T) {
 	assert.InDelta(t, float64(3600), float64(resp.Daily[0].Seconds), 5)
 	assert.Equal(t, 1, resp.Daily[0].Sessions)
 	assert.Equal(t, 1, resp.Daily[0].Rooms)
-	assert.Equal(t, now.Local().Format("2006-01-02"), resp.Daily[0].Date)
+	assert.Equal(t, now.Add(-90*time.Minute).Local().Format("2006-01-02"), resp.Daily[0].Date)
 }
 
 func TestGetDashboardRoomHistory(t *testing.T) {
@@ -209,12 +209,19 @@ func TestGetDashboardRoomHistory(t *testing.T) {
 		total += session.DurationSeconds
 	}
 	assert.Equal(t, total, resp.TotalSeconds)
-	require.Len(t, resp.Daily, 2)
-	assert.Equal(t, int64(3600), resp.Daily[0].Seconds)
-	assert.GreaterOrEqual(t, resp.Daily[1].Seconds, int64(3600))
+	// 会话可能跨午夜，按开始时间所在自然日汇总，日期断言不能依赖当前时刻。
+	expected := map[string]int64{
+		now.Add(-26 * time.Hour).Local().Format("2006-01-02"):   3600,
+		now.Add(-2 * time.Hour).Local().Format("2006-01-02"):    3600,
+		now.Add(-10 * time.Minute).Local().Format("2006-01-02"): ongoing.DurationSeconds,
+	}
+	actual := make(map[string]int64, len(resp.Daily))
 	for _, point := range resp.Daily {
+		actual[point.Date] = point.Seconds
 		assert.Equal(t, 1, point.Rooms)
 	}
+	require.Len(t, resp.Daily, len(expected))
+	assert.Equal(t, expected, actual)
 }
 
 func TestGetDashboardRoomHistoryNotFound(t *testing.T) {

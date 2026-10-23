@@ -152,6 +152,44 @@ openlist:
   data_path: ""
   username: ""
   password: ""
+# 转码完成后直连 WebDAV / S3 上传（独立于 OpenList）
+remote_upload:
+  # 是否启用；启用后转码成功会自动进入上传队列
+  enable: false
+  # webdav 或 s3
+  provider: webdav
+  # 远程路径模板，留空使用 /录播归档/{{ .Platform }}/{{ .HostName }}/{{ .FileName }}
+  path_tmpl: /录播归档/{{ .Platform }}/{{ .HostName }}/{{ .FileName }}
+  # 上传成功后删除本地文件
+  delete_after_upload: false
+  # 单个文件失败重试次数
+  retry_limit: 3
+  webdav:
+    # WebDAV 服务地址
+    url: ""
+    # 远程根目录
+    base_path: ""
+    # 用户名（可选）
+    username: ""
+    # 密码（可选）
+    password: ""
+  s3:
+    # S3 服务地址（不含协议头）
+    endpoint: ""
+    # 区域，默认 us-east-1
+    region: us-east-1
+    # 存储桶
+    bucket: ""
+    # 对象前缀
+    base_path: ""
+    # Access Key
+    access_key: ""
+    # Secret Key
+    secret_key: ""
+    # 使用 path-style 访问（MinIO 等自建服务通常需要）
+    path_style: false
+    # 使用 HTTPS
+    use_ssl: true
 update:
   auto_check: true
   check_interval_hours: 6

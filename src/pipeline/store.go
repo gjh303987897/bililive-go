@@ -40,6 +40,7 @@ type Store interface {
 // TaskFilter 任务过滤条件
 type TaskFilter struct {
 	Status   *PipelineStatus // 状态过滤
+	Kind     *TaskKind       // 队列类型过滤
 	LiveID   *string         // 直播间 ID 过滤
 	Platform *string         // 平台过滤
 	Limit    int             // 限制返回数量
@@ -238,7 +239,12 @@ func (s *SQLiteStore) ListTasks(ctx context.Context, filter TaskFilter) ([]*Pipe
 	query += " ORDER BY created_at DESC"
 
 	if filter.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", filter.Limit)
+		limit := filter.Limit
+		if filter.Kind != nil {
+			// 类型需要扫描后判定，先多取一些避免过滤后不足一页。
+			limit *= 4
+		}
+		query += fmt.Sprintf(" LIMIT %d", limit)
 		if filter.Offset > 0 {
 			query += fmt.Sprintf(" OFFSET %d", filter.Offset)
 		}
@@ -257,7 +263,14 @@ func (s *SQLiteStore) ListTasks(ctx context.Context, filter TaskFilter) ([]*Pipe
 			logrus.WithError(err).Warn("failed to scan pipeline task")
 			continue
 		}
+		if filter.Kind != nil && task.Kind() != *filter.Kind {
+			continue
+		}
 		tasks = append(tasks, task)
+	}
+
+	if filter.Limit > 0 && len(tasks) > filter.Limit {
+		tasks = tasks[:filter.Limit]
 	}
 
 	return tasks, rows.Err()

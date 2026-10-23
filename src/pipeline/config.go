@@ -10,6 +10,7 @@ const (
 	StageNameConvertMp4     = "convert_mp4"
 	StageNameExtractCover   = "extract_cover"
 	StageNameCloudUpload    = "cloud_upload"
+	StageNameRemoteUpload   = "remote_upload"
 	StageNameCustomCmd      = "custom_command"
 	StageNameBurnSubtitles  = "burn_subtitles"
 )
