@@ -200,16 +200,18 @@ https://github.com/bililive-go/bililive-go/wiki/Install-Linux
 
 ### docker
 
-使用 https://hub.docker.com/r/chigusa/bililive-go 镜像创建容器运行。
+使用 `ghcr.io/bililive-go/bililive-go` 镜像创建容器运行（Docker Hub 的 `chigusa/bililive-go` 仍会同步发布）。
+
+> GHCR 镜像由 `.github/workflows/ghcr.yaml` 在推送 `master` 或版本 tag 时自动构建。包默认是私有的，若未在 GitHub 包设置中改为公开，拉取前需先 `docker login ghcr.io`。
 
 例如：
 ```
-docker run --restart=always -v ~/config.yml:/etc/bililive-go/config.yml -v ~/Videos:/srv/bililive -p 8080:8080 -d chigusa/bililive-go
+docker run --restart=always -v ~/config.yml:/etc/bililive-go/config.yml -v ~/Videos:/srv/bililive -p 8080:8080 -d ghcr.io/bililive-go/bililive-go:latest
 ```
 
 ### docker compose
 
-使用项目根目录下的 `docker-compose.yml` 配置文件启动 docker compose 运行。
+使用项目根目录下的 `docker-compose.yml` 配置文件启动 docker compose 运行（默认拉取 GHCR 的 `latest` 镜像）。
 
 例如：
 ```

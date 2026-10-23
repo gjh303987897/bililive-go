@@ -4,7 +4,8 @@ volumes:
     prometheus_data: {}
 services:
   bililive-go:
-    image: chigusa/bililive-go
+    # GHCR 镜像由 GitHub Actions 自动构建；需要固定版本时改为具体 tag（如 :v0.8.0）
+    image: ghcr.io/bililive-go/bililive-go:latest
     restart: unless-stopped
     container_name: bililive-go
     volumes:

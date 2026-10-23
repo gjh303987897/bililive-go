@@ -1,0 +1,211 @@
+name: Publish Container Image
+
+# 每次向 master 推送、或打 v* tag 时，构建多架构镜像并推送到 GHCR。
+# 分支推送打 edge/sha tag，版本 tag 打同名 tag（非 rc 额外更新 latest）。
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: ghcr-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-image:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            arch: amd64
+          - platform: linux/arm64/v8
+            runner: ubuntu-24.04-arm
+            arch: arm64
+          - platform: linux/arm/v7
+            runner: ubuntu-24.04-arm # arm/v7 走 QEMU
+            arch: arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        run: |
+          echo "IMAGE=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=edge-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: '**/go.sum'
+
+      - name: Restore web build cache
+        id: cache-web
+        uses: actions/cache/restore@v4
+        with:
+          path: src/webapp/build
+          key: web-build-${{ runner.os }}-${{ hashFiles('.node-version', 'src/webapp/package-lock.json', 'src/webapp/package.json', 'src/webapp/tsconfig.json', 'src/webapp/src/**', 'src/webapp/public/**') }}
+
+      - uses: actions/setup-node@v4
+        if: steps.cache-web.outputs.cache-hit != 'true'
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: 'src/webapp/package-lock.json'
+
+      - name: Build web page
+        if: steps.cache-web.outputs.cache-hit != 'true'
+        run: |
+          npm --prefix src/webapp ci --no-audit --no-fund
+          npm --prefix src/webapp run build
+
+      - name: Save web build cache
+        if: steps.cache-web.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: src/webapp/build
+          key: web-build-${{ runner.os }}-${{ hashFiles('.node-version', 'src/webapp/package-lock.json', 'src/webapp/package.json', 'src/webapp/tsconfig.json', 'src/webapp/src/**', 'src/webapp/public/**') }}
+
+      - name: Build linux binary
+        env:
+          PLATFORM: linux
+          ARCH: ${{ matrix.arch }}
+          APP_VERSION: ${{ env.VERSION }}
+        run: go run ./build.go release
+
+      - name: Prepare docker context
+        run: |
+          mkdir -p docker-context/bin
+          mv "bin/bililive-linux-${{ matrix.arch }}" docker-context/bin/bililive-go
+          chmod +x docker-context/bin/bililive-go
+
+      - name: Cache built-in tools
+        id: cache-tools
+        uses: actions/cache@v4
+        with:
+          path: docker-tools-cache/${{ matrix.arch }}
+          key: docker-tools-${{ matrix.arch }}-${{ hashFiles('src/tools/remote-tools-config.json', 'scripts/docker-prepare-tools.mjs') }}
+
+      - name: Pre-download built-in tools
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        run: node scripts/docker-prepare-tools.mjs "${{ matrix.arch }}" "docker-tools-cache/${{ matrix.arch }}"
+
+      - name: Copy tools to docker context
+        run: |
+          mkdir -p docker-context/tools
+          cp -r "docker-tools-cache/${{ matrix.arch }}/"* docker-context/tools/ 2>/dev/null || true
+
+      - name: Set up QEMU
+        if: matrix.arch == 'arm'
+        uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ env.IMAGE }}:${{ env.VERSION }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.licenses=GPL-3.0
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=ghcr-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ghcr-${{ matrix.arch }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-manifest:
+    needs: build-image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tags
+        run: |
+          REPO="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          echo "IMAGE=${REPO}" >> "$GITHUB_ENV"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAGS="${REPO}:${GITHUB_REF_NAME}"
+            if ! echo "${GITHUB_REF_NAME}" | grep -q 'rc'; then
+              TAGS="${TAGS},${REPO}:latest"
+            fi
+          else
+            TAGS="${REPO}:edge,${REPO}:sha-${GITHUB_SHA::7}"
+          fi
+          echo "TAGS=${TAGS}" >> "$GITHUB_ENV"
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-arch manifest
+        working-directory: /tmp/digests
+        run: |
+          DIGEST_ARGS=""
+          for dgst in *; do
+            if echo "$dgst" | grep -qE '^[0-9a-f]{64}$'; then
+              DIGEST_ARGS="$DIGEST_ARGS ${IMAGE}@sha256:${dgst}"
+            else
+              echo "跳过非 digest 文件: $dgst"
+            fi
+          done
+          IFS=',' read -ra TAG_LIST <<< "$TAGS"
+          for tag in "${TAG_LIST[@]}"; do
+            docker buildx imagetools create -t "$tag" $DIGEST_ARGS
+          done
+
+      - name: Inspect image
+        run: docker buildx imagetools inspect "${IMAGE}:${{ github.ref_type == 'tag' && github.ref_name || 'edge' }}"
