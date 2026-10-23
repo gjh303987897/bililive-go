@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bililive-go/bililive-go/src/pipeline"
 	"github.com/bililive-go/bililive-go/src/pkg/livelogger"
@@ -98,10 +99,17 @@ func (s *ConvertMp4Stage) Execute(ctx *pipeline.PipelineContext, input []pipelin
 		base := strings.TrimSuffix(file.Path, ext)
 		outputPath := base + ".mp4"
 
-		// 临时文件路径
+		// 临时文件使用随机后缀：重试、并发任务或上次异常退出留下的同名文件都不会互相覆盖。
 		dir := filepath.Dir(outputPath)
-		baseName := filepath.Base(outputPath)
-		tempFile := filepath.Join(dir, ".converting_"+baseName)
+		stem := strings.TrimSuffix(filepath.Base(outputPath), ".mp4")
+		cleanupStaleConvertTemps(dir, stem)
+		tempHandle, err := os.CreateTemp(dir, ".converting_"+stem+".*.mp4")
+		if err != nil {
+			s.logs += fmt.Sprintf("创建临时文件失败: %s\n", err.Error())
+			return nil, fmt.Errorf("failed to create temp file: %w", err)
+		}
+		tempFile := tempHandle.Name()
+		_ = tempHandle.Close()
 
 		s.logger.Infof("转换 MP4: %s -> %s", file.Path, outputPath)
 
@@ -139,6 +147,8 @@ func (s *ConvertMp4Stage) Execute(ctx *pipeline.PipelineContext, input []pipelin
 			"-copytb", "1",
 			// 整体平移起始时间戳，保留音视频相对偏移和断网期间的时间空档。
 			"-avoid_negative_ts", "make_zero",
+			// 流复制时音视频包可能长时间不对齐，默认 128 包的复用队列容易溢出导致随机失败。
+			"-max_muxing_queue_size", "4096",
 			"-movflags", "+faststart",
 			"-progress", "pipe:1",
 			"-f", "mp4",
@@ -153,17 +163,20 @@ func (s *ConvertMp4Stage) Execute(ctx *pipeline.PipelineContext, input []pipelin
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			s.logs += fmt.Sprintf("创建输出管道失败: %s\n", err.Error())
+			os.Remove(tempFile)
 			return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
 		}
 
 		stderr, err := cmd.StderrPipe()
 		if err != nil {
 			s.logs += fmt.Sprintf("创建错误管道失败: %s\n", err.Error())
+			os.Remove(tempFile)
 			return nil, fmt.Errorf("failed to create stderr pipe: %w", err)
 		}
 
 		if err := cmd.Start(); err != nil {
 			s.logs += fmt.Sprintf("启动 ffmpeg 失败: %s\n", err.Error())
+			os.Remove(tempFile)
 			return nil, fmt.Errorf("failed to start ffmpeg: %w", err)
 		}
 
@@ -198,10 +211,15 @@ func (s *ConvertMp4Stage) Execute(ctx *pipeline.PipelineContext, input []pipelin
 			return nil, fmt.Errorf("temp file was not created: %s", tempFile)
 		}
 
-		// 重命名临时文件
-		if err := os.Rename(tempFile, outputPath); err != nil {
+		// 原子替换输出文件。目标可能已存在（重试 / 同目录旧转换结果 / 同名不同扩展名的分段），
+		// Windows 的 os.Rename 不允许覆盖已有文件，需要先移除再重命名。
+		if err := replaceFile(tempFile, outputPath); err != nil {
 			os.Remove(tempFile)
 			return nil, fmt.Errorf("failed to rename temp file: %w", err)
+		}
+		// CreateTemp 默认 0600，转码产物应与录制文件一样可被其他用户/容器读取。
+		if err := os.Chmod(outputPath, 0644); err != nil {
+			s.logger.WithError(err).Warnf("设置输出文件权限失败: %s", outputPath)
 		}
 
 		// 添加输出文件
@@ -367,6 +385,43 @@ func (s *ConvertMp4Stage) GetCommands() []string {
 
 func (s *ConvertMp4Stage) GetLogs() string {
 	return s.logs
+}
+
+// replaceFile 用 source 覆盖 dest。目标已存在时先删除（Windows 的 Rename 不支持覆盖）。
+func replaceFile(source, dest string) error {
+	if err := os.Rename(source, dest); err == nil {
+		return nil
+	}
+	if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove existing target: %w", err)
+	}
+	return os.Rename(source, dest)
+}
+
+// staleConvertTempAge 超过该时长的转换临时文件视为进程异常退出后的残留。
+const staleConvertTempAge = 12 * time.Hour
+
+// cleanupStaleConvertTemps 删除同一输出名下超过 staleConvertTempAge 的临时文件。
+// 正常转换的临时文件在一小时内结束，按时间过滤可避免删掉并发任务正在写的文件。
+func cleanupStaleConvertTemps(dir, stem string) {
+	patterns := []string{
+		filepath.Join(dir, ".converting_"+stem+".*.mp4"),
+		filepath.Join(dir, ".converting_"+stem+".mp4"), // 旧版本的固定临时文件名
+	}
+	cutoff := time.Now().Add(-staleConvertTempAge)
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			continue
+		}
+		for _, match := range matches {
+			info, err := os.Stat(match)
+			if err != nil || info.ModTime().After(cutoff) {
+				continue
+			}
+			_ = os.Remove(match)
+		}
+	}
 }
 
 // getFFmpegInputArgs 构建 FFmpeg 输入容错参数；输入探测和正式转换必须使用相同参数。

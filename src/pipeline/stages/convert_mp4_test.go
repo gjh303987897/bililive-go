@@ -21,6 +21,7 @@ import (
 	"github.com/bililive-go/bililive-go/src/pkg/livelogger"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -578,11 +579,9 @@ func TestConvertMp4Stage_FFmpeg(t *testing.T) {
 	t.Run("转换失败保留源文件和已有输出", func(t *testing.T) {
 		inputPath := filepath.Join(t.TempDir(), "invalid.flv")
 		outputPath := strings.TrimSuffix(inputPath, ".flv") + ".mp4"
-		tempPath := filepath.Join(filepath.Dir(inputPath), ".converting_invalid.mp4")
 		source, existing := []byte("FLV-invalid"), []byte("已有输出")
 		require.NoError(t, os.WriteFile(inputPath, source, 0644))
 		require.NoError(t, os.WriteFile(outputPath, existing, 0644))
-		require.NoError(t, os.WriteFile(tempPath, []byte("未完成的转换"), 0644))
 		stage, ctx := tools.stageContext(t, true)
 		output, err := stage.Execute(ctx, []pipeline.FileInfo{{Path: inputPath, Type: pipeline.FileTypeVideo}})
 		require.Error(t, err)
@@ -595,7 +594,28 @@ func TestConvertMp4Stage_FFmpeg(t *testing.T) {
 		data, err = os.ReadFile(outputPath)
 		require.NoError(t, err)
 		require.Equal(t, existing, data)
-		require.NoFileExists(t, tempPath)
+		leftovers, err := filepath.Glob(filepath.Join(filepath.Dir(inputPath), ".converting_invalid.*.mp4"))
+		require.NoError(t, err)
+		require.Empty(t, leftovers, "转换失败后不应残留临时文件")
+	})
+
+	t.Run("已有输出文件时覆盖", func(t *testing.T) {
+		dir := t.TempDir()
+		inputPath := filepath.Join(dir, "overwrite.flv")
+		outputPath := filepath.Join(dir, "overwrite.mp4")
+		require.NoError(t, os.WriteFile(inputPath, av, 0644))
+		require.NoError(t, os.WriteFile(outputPath, []byte("旧输出"), 0644))
+
+		stage, ctx := tools.stageContext(t, false)
+		output, err := stage.Execute(ctx, []pipeline.FileInfo{{Path: inputPath, Type: pipeline.FileTypeVideo}})
+		require.NoError(t, err, "%s", stage.GetLogs())
+		require.Len(t, output, 2)
+
+		after := tools.probe(t, outputPath)
+		assertMP4TestOutput(t, outputPath, after)
+		leftovers, err := filepath.Glob(filepath.Join(dir, ".converting_overwrite.*.mp4"))
+		require.NoError(t, err)
+		require.Empty(t, leftovers)
 	})
 }
 
@@ -958,4 +978,54 @@ func damageMP4TestFLVTag(t *testing.T, source []byte) []byte {
 	}
 	t.Fatal("没有找到适合构造损坏的 FLV 标签")
 	return nil
+}
+
+func TestReplaceFileOverwritesExistingTarget(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, ".converting_video.123.mp4")
+	target := filepath.Join(dir, "video.mp4")
+	require.NoError(t, os.WriteFile(source, []byte("new"), 0644))
+	require.NoError(t, os.WriteFile(target, []byte("old"), 0644))
+
+	require.NoError(t, replaceFile(source, target))
+
+	assert.NoFileExists(t, source)
+	content, err := os.ReadFile(target)
+	require.NoError(t, err)
+	assert.Equal(t, "new", string(content))
+}
+
+func TestReplaceFileCreatesMissingTarget(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, ".converting_video.123.mp4")
+	target := filepath.Join(dir, "video.mp4")
+	require.NoError(t, os.WriteFile(source, []byte("new"), 0644))
+
+	require.NoError(t, replaceFile(source, target))
+
+	content, err := os.ReadFile(target)
+	require.NoError(t, err)
+	assert.Equal(t, "new", string(content))
+}
+
+func TestCleanupStaleConvertTemps(t *testing.T) {
+	dir := t.TempDir()
+	stale := filepath.Join(dir, ".converting_video.111.mp4")
+	fresh := filepath.Join(dir, ".converting_video.222.mp4")
+	other := filepath.Join(dir, ".converting_other.333.mp4")
+	legacy := filepath.Join(dir, ".converting_video.mp4")
+	for _, path := range []string{stale, fresh, other, legacy} {
+		require.NoError(t, os.WriteFile(path, []byte("x"), 0644))
+	}
+	old := time.Now().Add(-staleConvertTempAge - time.Hour)
+	require.NoError(t, os.Chtimes(stale, old, old))
+	require.NoError(t, os.Chtimes(other, old, old))
+	require.NoError(t, os.Chtimes(legacy, old, old))
+
+	cleanupStaleConvertTemps(dir, "video")
+
+	assert.NoFileExists(t, stale)
+	assert.NoFileExists(t, legacy)
+	assert.FileExists(t, fresh)
+	assert.FileExists(t, other, "其他输出名的临时文件不应被删除")
 }
