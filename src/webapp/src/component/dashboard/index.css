@@ -32,3 +32,12 @@
     color: #999;
     word-break: break-all;
 }
+
+.dashboard-room-link {
+    padding: 0;
+    height: auto;
+}
+
+.dashboard-history-summary {
+    margin-bottom: 16px;
+}

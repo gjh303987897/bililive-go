@@ -133,6 +133,7 @@ func initMux(ctx context.Context) *mux.Router {
 	apiRoute.HandleFunc("/update/rollback", doRollback).Methods("POST")       // 执行回滚
 	apiRoute.Handle("/metrics", promhttp.Handler())
 	apiRoute.HandleFunc("/dashboard", getDashboard).Methods("GET") // 内置监控面板聚合数据
+	apiRoute.HandleFunc("/dashboard/live/{id}/history", getDashboardRoomHistory).Methods("GET") // 单直播间开播历史
 
 	// IO 统计 API 路由
 	apiRoute.HandleFunc("/iostats", getIOStats).Methods("GET")

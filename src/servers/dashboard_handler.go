@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gorilla/mux"
+
 	"github.com/bililive-go/bililive-go/src/instance"
 	"github.com/bililive-go/bililive-go/src/livestate"
 	"github.com/bililive-go/bililive-go/src/pkg/iostats"
@@ -66,15 +68,23 @@ type dashboardSummary struct {
 	TotalBytes int64 `json:"total_bytes"`
 }
 
+type dashboardDailyPoint struct {
+	Date     string `json:"date"`
+	Seconds  int64  `json:"seconds"`
+	Sessions int    `json:"sessions"`
+	Rooms    int    `json:"rooms"`
+}
+
 type dashboardResponse struct {
-	GeneratedAt    int64             `json:"generated_at"`
-	StartTime      int64             `json:"start_time"`
-	EndTime        int64             `json:"end_time"`
-	IOStatsEnabled bool              `json:"iostats_enabled"`
-	Summary        dashboardSummary  `json:"summary"`
-	Rooms          []dashboardRoom   `json:"rooms"`
-	Bitrate        []dashboardSeries `json:"bitrate"`
-	DurationRank   []dashboardRoom   `json:"duration_ranking"`
+	GeneratedAt    int64                 `json:"generated_at"`
+	StartTime      int64                 `json:"start_time"`
+	EndTime        int64                 `json:"end_time"`
+	IOStatsEnabled bool                  `json:"iostats_enabled"`
+	Summary        dashboardSummary      `json:"summary"`
+	Rooms          []dashboardRoom       `json:"rooms"`
+	Bitrate        []dashboardSeries     `json:"bitrate"`
+	DurationRank   []dashboardRoom       `json:"duration_ranking"`
+	Daily          []dashboardDailyPoint `json:"daily"`
 }
 
 // getDashboard 返回监控面板所需的聚合快照。
@@ -98,6 +108,8 @@ func getDashboard(writer http.ResponseWriter, r *http.Request) {
 
 	rooms := make([]dashboardRoom, 0, len(roomList))
 	lookup := make(map[string]dashboardRoom, len(roomList))
+	dailySeconds := make(map[string]*dashboardDailyPoint)
+	dailyRooms := make(map[string]map[string]struct{})
 	summary := dashboardSummary{Rooms: len(roomList)}
 	for id, l := range roomList {
 		info := parseInfo(ctx, l)
@@ -131,7 +143,7 @@ func getDashboard(writer http.ResponseWriter, r *http.Request) {
 			summary.TotalBytes += room.TotalBytes
 		}
 
-		room.SecondsInRange, room.SessionsInRange = dashboardSessionStats(ctx, inst, room.LiveID, start, end)
+		room.SecondsInRange, room.SessionsInRange = dashboardSessionStats(ctx, inst, room.LiveID, start, end, dailySeconds, dailyRooms)
 		rooms = append(rooms, room)
 		lookup[room.LiveID] = room
 	}
@@ -168,6 +180,13 @@ func getDashboard(writer http.ResponseWriter, r *http.Request) {
 		return ranking[i].SecondsInRange > ranking[j].SecondsInRange
 	})
 
+	daily := make([]dashboardDailyPoint, 0, len(dailySeconds))
+	for date, point := range dailySeconds {
+		point.Rooms = len(dailyRooms[date])
+		daily = append(daily, *point)
+	}
+	sort.Slice(daily, func(i, j int) bool { return daily[i].Date < daily[j].Date })
+
 	writeJSON(writer, dashboardResponse{
 		GeneratedAt:    now.UnixMilli(),
 		StartTime:      start.UnixMilli(),
@@ -177,6 +196,7 @@ func getDashboard(writer http.ResponseWriter, r *http.Request) {
 		Rooms:          rooms,
 		Bitrate:        series,
 		DurationRank:   ranking,
+		Daily:          daily,
 	})
 }
 
@@ -243,8 +263,8 @@ func parseRecorderSize(value any) int64 {
 	return n
 }
 
-// dashboardSessionStats 统计窗口内的累计开播秒数与会话次数。
-func dashboardSessionStats(ctx context.Context, inst *instance.Instance, liveID string, start, end time.Time) (seconds int64, count int) {
+// dashboardSessionStats 统计窗口内的累计开播秒数与会话次数，并按自然日累加。
+func dashboardSessionStats(ctx context.Context, inst *instance.Instance, liveID string, start, end time.Time, daily map[string]*dashboardDailyPoint, dailyRooms map[string]map[string]struct{}) (seconds int64, count int) {
 	store, ok := inst.LiveStateStore.(livestate.Store)
 	if !ok {
 		return 0, 0
@@ -265,12 +285,193 @@ func dashboardSessionStats(ctx context.Context, inst *instance.Instance, liveID 
 		if sessionStart.Before(start) {
 			sessionStart = start
 		}
-		if sessionEnd.After(sessionStart) {
-			seconds += int64(sessionEnd.Sub(sessionStart).Seconds())
-			count++
+		if !sessionEnd.After(sessionStart) {
+			continue
+		}
+		delta := int64(sessionEnd.Sub(sessionStart).Seconds())
+		seconds += delta
+		count++
+
+		if daily == nil {
+			continue
+		}
+		date := sessionStart.Local().Format("2006-01-02")
+		point := daily[date]
+		if point == nil {
+			point = &dashboardDailyPoint{Date: date}
+			daily[date] = point
+		}
+		point.Seconds += delta
+		point.Sessions++
+		if dailyRooms != nil {
+			if dailyRooms[date] == nil {
+				dailyRooms[date] = make(map[string]struct{})
+			}
+			dailyRooms[date][liveID] = struct{}{}
 		}
 	}
 	return seconds, count
+}
+
+type dashboardSession struct {
+	StartTime       int64  `json:"start_time"`
+	EndTime         int64  `json:"end_time"`
+	DurationSeconds int64  `json:"duration_seconds"`
+	Ongoing         bool   `json:"ongoing"`
+	EndReason       string `json:"end_reason"`
+}
+
+type dashboardRoomHistory struct {
+	LiveID        string                `json:"live_id"`
+	HostName      string                `json:"host_name"`
+	RoomName      string                `json:"room_name"`
+	Platform      string                `json:"platform"`
+	Days          int                   `json:"days"`
+	TotalSeconds  int64                 `json:"total_seconds"`
+	TotalSessions int                   `json:"total_sessions"`
+	Sessions      []dashboardSession    `json:"sessions"`
+	Daily         []dashboardDailyPoint `json:"daily"`
+}
+
+const (
+	dashboardHistoryDefaultDays = 30
+	dashboardHistoryMaxDays     = 365
+	dashboardHistoryMaxLimit    = 500
+)
+
+// getDashboardRoomHistory 返回单个直播间的历史开播记录与按日开播时长。
+func getDashboardRoomHistory(writer http.ResponseWriter, r *http.Request) {
+	inst := instance.GetInstance(r.Context())
+	if inst == nil {
+		writeJsonWithStatusCode(writer, http.StatusServiceUnavailable, commonResp{
+			ErrNo:  http.StatusServiceUnavailable,
+			ErrMsg: "instance 未初始化",
+		})
+		return
+	}
+
+	liveID := mux.Vars(r)["id"]
+	liveObj, ok := inst.Lives.Get(types.LiveID(liveID))
+	if !ok {
+		writeJsonWithStatusCode(writer, http.StatusNotFound, commonResp{
+			ErrNo:  http.StatusNotFound,
+			ErrMsg: "直播间不存在",
+		})
+		return
+	}
+
+	store, ok := inst.LiveStateStore.(livestate.Store)
+	if !ok {
+		writeJsonWithStatusCode(writer, http.StatusServiceUnavailable, commonResp{
+			ErrNo:  http.StatusServiceUnavailable,
+			ErrMsg: "状态持久化功能未启用",
+		})
+		return
+	}
+
+	days := parseDashboardDays(r)
+	limit := dashboardHistoryMaxLimit
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 && v < limit {
+			limit = v
+		}
+	}
+
+	now := time.Now()
+	windowStart := now.Add(-time.Duration(days) * 24 * time.Hour)
+
+	info := parseInfo(r.Context(), liveObj)
+	sessions, err := store.GetSessionsByLiveID(r.Context(), liveID, dashboardSessionLimit)
+	if err != nil {
+		writeJsonWithStatusCode(writer, http.StatusInternalServerError, commonResp{
+			ErrNo:  http.StatusInternalServerError,
+			ErrMsg: "读取开播记录失败",
+		})
+		return
+	}
+
+	result := dashboardRoomHistory{
+		LiveID:   liveID,
+		HostName: info.HostName,
+		RoomName: info.RoomName,
+		Platform: liveObj.GetPlatformCNName(),
+		Days:     days,
+		Sessions: make([]dashboardSession, 0, 16),
+		Daily:    make([]dashboardDailyPoint, 0, days),
+	}
+	daily := make(map[string]*dashboardDailyPoint)
+
+	for _, session := range sessions {
+		if len(result.Sessions) >= limit {
+			break
+		}
+		start := session.StartTime
+		if start.IsZero() {
+			continue
+		}
+		end := session.EndTime
+		ongoing := end.IsZero()
+		if ongoing {
+			end = now
+		}
+		if end.Before(windowStart) || start.After(now) {
+			continue
+		}
+		if start.Before(windowStart) {
+			start = windowStart
+		}
+		if end.After(now) {
+			end = now
+		}
+		duration := int64(end.Sub(start).Seconds())
+		if duration < 0 {
+			duration = 0
+		}
+		endReason := session.EndReason
+		if ongoing {
+			endReason = ""
+		}
+
+		result.Sessions = append(result.Sessions, dashboardSession{
+			StartTime:       start.UnixMilli(),
+			EndTime:         end.UnixMilli(),
+			DurationSeconds: duration,
+			Ongoing:         ongoing,
+			EndReason:       endReason,
+		})
+		result.TotalSeconds += duration
+		result.TotalSessions++
+
+		date := start.Local().Format("2006-01-02")
+		point := daily[date]
+		if point == nil {
+			point = &dashboardDailyPoint{Date: date}
+			daily[date] = point
+		}
+		point.Seconds += duration
+		point.Sessions++
+	}
+
+	for _, point := range daily {
+		point.Rooms = 1
+		result.Daily = append(result.Daily, *point)
+	}
+	sort.Slice(result.Daily, func(i, j int) bool { return result.Daily[i].Date < result.Daily[j].Date })
+
+	writeJSON(writer, result)
+}
+
+func parseDashboardDays(r *http.Request) int {
+	days := dashboardHistoryDefaultDays
+	if raw := r.URL.Query().Get("days"); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+			days = v
+		}
+	}
+	if days > dashboardHistoryMaxDays {
+		days = dashboardHistoryMaxDays
+	}
+	return days
 }
 
 // queryDashboardBitrate 查询窗口内的下载速率，返回最新速度、降采样后的曲线和统计模块是否可用。
@@ -297,6 +498,7 @@ func queryDashboardBitrate(ctx context.Context, inst *instance.Instance, start, 
 
 	// 最新速率：窗口末尾 1 分钟内的最后一个采样点
 	speedCutoff := end.Add(-time.Minute).UnixMilli()
+	bucketMillis := dashboardBucketMillis(start, end)
 	buckets := make(map[string]map[int64]*struct {
 		sum   int64
 		count int
@@ -314,7 +516,7 @@ func queryDashboardBitrate(ctx context.Context, inst *instance.Instance, start, 
 				count int
 			})
 		}
-		bucket := stat.Timestamp / dashboardBucketMillis(start, end)
+		bucket := stat.Timestamp / bucketMillis
 		entry := buckets[stat.LiveID][bucket]
 		if entry == nil {
 			entry = &struct {
@@ -339,7 +541,7 @@ func queryDashboardBitrate(ctx context.Context, inst *instance.Instance, start, 
 			if entry.count == 0 {
 				continue
 			}
-			item.Points = append(item.Points, dashboardPoint{T: ts, V: entry.sum / int64(entry.count)})
+			item.Points = append(item.Points, dashboardPoint{T: ts * bucketMillis, V: entry.sum / int64(entry.count)})
 		}
 		sort.Slice(item.Points, func(i, j int) bool { return item.Points[i].T < item.Points[j].T })
 		if len(item.Points) > 0 {

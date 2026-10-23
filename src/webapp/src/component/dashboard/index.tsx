@@ -5,6 +5,8 @@ import {
   Button,
   Card,
   Col,
+  Descriptions,
+  Drawer,
   Empty,
   Row,
   Select,
@@ -89,7 +91,45 @@ interface DashboardData {
   rooms: DashboardRoom[];
   bitrate: DashboardSeries[];
   duration_ranking: DashboardRoom[];
+  daily: DashboardDailyPoint[];
 }
+
+interface DashboardDailyPoint {
+  date: string;
+  seconds: number;
+  sessions: number;
+  rooms: number;
+}
+
+interface RoomHistorySession {
+  start_time: number;
+  end_time: number;
+  duration_seconds: number;
+  ongoing: boolean;
+  end_reason: string;
+}
+
+interface RoomHistory {
+  live_id: string;
+  host_name: string;
+  room_name: string;
+  platform: string;
+  days: number;
+  total_seconds: number;
+  total_sessions: number;
+  sessions: RoomHistorySession[];
+  daily: DashboardDailyPoint[];
+}
+
+const END_REASON_LABELS: Record<string, string> = {
+  normal: '正常下播',
+  user_stop: '停止监控',
+  crash: '程序崩溃',
+  error: '录制异常',
+  unknown: '未知',
+};
+
+const endReasonLabel = (reason: string): string => END_REASON_LABELS[reason] ?? (reason || '未知');
 
 const RANGE_OPTIONS = [
   { value: 60 * 60 * 1000, label: '最近 1 小时' },
@@ -146,7 +186,11 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number>(0);
+  const [historyRoom, setHistoryRoom] = useState<DashboardRoom | null>(null);
+  const [history, setHistory] = useState<RoomHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const inFlight = useRef(false);
+  const historyDays = Math.max(1, Math.min(365, Math.round(range / 86400000)));
 
   const load = useCallback(async () => {
     if (inFlight.current) return;
@@ -207,6 +251,69 @@ const Dashboard: React.FC = () => {
     }));
   }, [data]);
 
+  const dailyChart = useMemo(() => (data?.daily ?? []).map((point) => ({
+    date: point.date.slice(5),
+    hours: Number((point.seconds / 3600).toFixed(2)),
+    sessions: point.sessions,
+    rooms: point.rooms,
+  })), [data]);
+
+  useEffect(() => {
+    if (!historyRoom) return undefined;
+    let cancelled = false;
+    setHistory(null);
+    setHistoryLoading(true);
+    (async () => {
+      try {
+        const response = await fetch(
+          `/api/dashboard/live/${encodeURIComponent(historyRoom.live_id)}/history?days=${historyDays}&limit=100`,
+        );
+        const payload = await response.json();
+        if (!response.ok || payload.err_no) {
+          throw new Error(payload.err_msg || `HTTP ${response.status}`);
+        }
+        if (!cancelled) setHistory(payload as RoomHistory);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [historyRoom, historyDays]);
+
+  const historyColumns = useMemo<ColumnsType<RoomHistorySession>>(() => [
+    {
+      title: '开播时间',
+      dataIndex: 'start_time',
+      key: 'start_time',
+      width: 160,
+      render: (value: number) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+    },
+    {
+      title: '下播时间',
+      dataIndex: 'end_time',
+      key: 'end_time',
+      width: 160,
+      render: (value: number, session) => (session.ongoing ? <Tag color="green">直播中</Tag> : dayjs(value).format('YYYY-MM-DD HH:mm')),
+    },
+    {
+      title: '时长',
+      dataIndex: 'duration_seconds',
+      key: 'duration_seconds',
+      width: 110,
+      render: (value: number) => formatDuration(value),
+    },
+    {
+      title: '结束原因',
+      dataIndex: 'end_reason',
+      key: 'end_reason',
+      render: (value: string, session) => (session.ongoing ? '-' : endReasonLabel(value)),
+    },
+  ], []);
+
   const columns = useMemo<ColumnsType<DashboardRoom>>(() => [
     {
       title: '状态',
@@ -233,8 +340,14 @@ const Dashboard: React.FC = () => {
       key: 'room',
       render: (_, room) => (
         <div>
-          <Link to={`/?room=${room.live_id}`}>{roomLabel(room)}</Link>
-          <div className="dashboard-room-sub">{room.room_name}</div>
+          <Button type="link" className="dashboard-room-link" onClick={() => setHistoryRoom(room)}>
+            {roomLabel(room)}
+          </Button>
+          <div className="dashboard-room-sub">
+            {room.room_name}
+            {' · '}
+            <Link to={`/?room=${room.live_id}`}>监控页</Link>
+          </div>
         </div>
       ),
     },
@@ -420,6 +533,32 @@ const Dashboard: React.FC = () => {
                     )}
                   </Card>
 
+                  <Card size="small" title="每日开播时长（窗口内）" className="dashboard-card">
+                    {dailyChart.length === 0 ? (
+                      <Empty description="当前窗口没有开播记录" />
+                    ) : (
+                      <div className="dashboard-chart dashboard-chart-small">
+                        <ResponsiveContainer>
+                          <BarChart data={dailyChart}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="date" />
+                            <YAxis unit="h" />
+                            <RechartsTooltip
+                              formatter={(value, name, entry) => {
+                                const point = entry?.payload as { sessions: number; rooms: number } | undefined;
+                                return [
+                                  `${Number(value)} 小时`,
+                                  `${point?.sessions ?? 0} 场 · ${point?.rooms ?? 0} 个直播间`,
+                                ];
+                              }}
+                            />
+                            <Bar dataKey="hours" fill="#52c41a" isAnimationActive={false} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </Card>
+
                   <Card size="small" title="直播间明细" className="dashboard-card">
                     <Table
                       size="small"
@@ -451,6 +590,64 @@ const Dashboard: React.FC = () => {
           ]}
         />
       </Spin>
+
+      <Drawer
+        width={720}
+        open={historyRoom !== null}
+        onClose={() => setHistoryRoom(null)}
+        title={historyRoom ? `${roomLabel(historyRoom)} 的开播历史` : '开播历史'}
+        extra={historyRoom && (
+          <Link to={`/?room=${historyRoom.live_id}`}>
+            <Button type="link">打开监控页</Button>
+          </Link>
+        )}
+      >
+        <Spin spinning={historyLoading}>
+          {history ? (
+            <>
+              <Descriptions size="small" column={3} className="dashboard-history-summary">
+                <Descriptions.Item label="窗口">{history.days} 天</Descriptions.Item>
+                <Descriptions.Item label="开播场次">{history.total_sessions}</Descriptions.Item>
+                <Descriptions.Item label="累计开播">{formatDuration(history.total_seconds)}</Descriptions.Item>
+              </Descriptions>
+
+              <Card size="small" title="每日开播时长" className="dashboard-card">
+                {history.daily.length === 0 ? (
+                  <Empty description="窗口内没有开播记录" />
+                ) : (
+                  <div className="dashboard-chart dashboard-chart-small">
+                    <ResponsiveContainer>
+                      <BarChart data={history.daily.map((point) => ({
+                        date: point.date.slice(5),
+                        hours: Number((point.seconds / 3600).toFixed(2)),
+                        sessions: point.sessions,
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis unit="h" />
+                        <RechartsTooltip formatter={(value) => [`${Number(value)} 小时`, '开播时长']} />
+                        <Bar dataKey="hours" fill="#1677ff" isAnimationActive={false} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </Card>
+
+              <Card size="small" title="开播记录" className="dashboard-card">
+                <Table
+                  size="small"
+                  rowKey="start_time"
+                  dataSource={history.sessions}
+                  columns={historyColumns}
+                  pagination={{ pageSize: 10, hideOnSinglePage: true }}
+                />
+              </Card>
+            </>
+          ) : (
+            !historyLoading && <Empty description="暂无记录" />
+          )}
+        </Spin>
+      </Drawer>
     </div>
   );
 };
