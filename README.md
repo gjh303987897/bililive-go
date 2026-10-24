@@ -152,35 +152,109 @@ cookies:
 
 ## 安装与运行
 
+### 环境要求
+
+- 64 位 Windows / macOS / Linux，或支持 Docker 的 NAS
+- 可写磁盘空间：录制文件会持续增长，建议单独挂载数据盘
+- 端口 `8080`（可在配置的 `rpc.bind` 修改）
+- FFmpeg：不强制预装。程序会自动下载内置工具；也可在配置中指定 `ffmpeg_path`
+- Go 源码运行需要 1.26+；普通用户直接用二进制或镜像即可
+
+无论哪种方式，第一次启动前都建议先准备配置文件。最小配置至少包含监听地址、输出目录和一个直播间：
+
+```yaml
+rpc:
+  enable: true
+  bind: :8080
+out_put_path: /path/to/Videos
+live_rooms:
+  - url: https://live.bilibili.com/123456
+```
+
+完整字段见仓库根目录的 `config.yml`（含注释）。也可以先启动，再在网页左侧 `设置` 中编辑。
+
 ### 二进制
 
-- Windows：https://github.com/bililive-go/bililive-go/wiki/Install-Windows
-- macOS：https://github.com/bililive-go/bililive-go/wiki/Install-macOS
-- Linux：https://github.com/bililive-go/bililive-go/wiki/Install-Linux
+| 系统 | 安装说明 |
+|---|---|
+| Windows | https://github.com/bililive-go/bililive-go/wiki/Install-Windows |
+| macOS | https://github.com/bililive-go/bililive-go/wiki/Install-macOS |
+| Linux | https://github.com/bililive-go/bililive-go/wiki/Install-Linux |
+
+通用步骤：
+
+1. 从 [Releases](https://github.com/bililive-go/bililive-go/releases) 下载对应平台的压缩包并解压
+2. 把 `config.yml` 放在可执行文件同目录，或启动时用 `-c /path/to/config.yml` 指定
+3. 启动程序，浏览器访问 `http://<主机>:8080`
+
+```bash
+chmod +x bililive-linux-amd64
+./bililive-linux-amd64 -c ./config.yml
+```
+
+Linux 可用 `contrib/systemd/bililive-go.service` 配置开机自启（按文件内注释修改用户与路径）。
 
 ### Docker
 
-使用 `ghcr.io/bililive-go/bililive-go` 镜像创建容器（Docker Hub 的 `chigusa/bililive-go` 仍会同步发布）。
+镜像地址：`ghcr.io/bililive-go/bililive-go`。Docker Hub 的 `chigusa/bililive-go` 作为同步镜像保留。
 
-> 镜像由 `.github/workflows/ghcr.yaml` 在推送 `master` 或版本 tag 时自动构建。包默认私有；若未在 GitHub 包设置中改为公开，拉取前需先 `docker login ghcr.io`。
+> 镜像由 `.github/workflows/ghcr.yaml` 在推送 `master` 或版本 tag 时构建。GHCR 包默认私有，首次拉取前需 `docker login ghcr.io`，或在 GitHub 包设置中改为公开。
+
+可用的 tag：
+
+| tag | 含义 |
+|---|---|
+| `latest` | 最新正式版 |
+| `v0.8.0` 等 | 固定版本，生产环境推荐 |
+| `edge` | `master` 最新提交，可能不稳定 |
+| `sha-<7位>` | 精确到提交，便于复现 |
 
 ```bash
-docker run --restart=always \
-  -v ~/config.yml:/etc/bililive-go/config.yml \
-  -v ~/Videos:/srv/bililive \
-  -p 8080:8080 -d \
+docker login ghcr.io
+docker run -d --restart=unless-stopped \
+  --name bililive-go \
+  -e PUID=$(id -u) -e PGID=$(id -g) -e UMASK=022 -e TZ=Asia/Shanghai \
+  -v "$PWD/config.yml:/etc/bililive-go/config.yml" \
+  -v "$PWD/Videos:/srv/bililive" \
+  -p 8080:8080 \
   ghcr.io/bililive-go/bililive-go:latest
 ```
 
+- `PUID` / `PGID`：容器以该 UID/GID 写入录制目录，避免宿主机产生 root 文件；用 `id -u`、`id -g` 获取
+- `UMASK`：新建文件权限，默认 `022`
+- `/srv/bililive`：录制输出与 `.appdata`（数据库、统计）都在此目录，必须持久化
+- `/etc/bililive-go/config.yml`：配置文件挂载点
+- 不要挂载整个仓库目录，也不要覆盖 `/opt/bililive/tools`（内置工具在镜像里）
+- 升级：`docker pull` 后重建容器；配置与视频在挂载卷中不会丢失
+
 ### Docker Compose
 
-使用仓库根目录的 `docker-compose.yml`（默认拉取 GHCR 的 `latest`）：
+仓库根目录的 `docker-compose.yml` 默认使用 GHCR 镜像，并预留了可选的 Prometheus / Grafana 段。
 
 ```bash
-docker compose up
+# 1. 按需修改 compose 与 config.docker.yml
+# 2. 如启用 Grafana，复制 example.env 为 .env 并改掉默认账号密码
+cp example.env .env
+docker login ghcr.io
+docker compose up -d
+docker compose logs -f bililive-go
 ```
 
-默认使用 `config.docker.yml` 作为配置、`Videos/` 作为输出目录。NAS 用户可参考[群晖图文说明](./docs/Synology-related.md#如何用-docker-compose-安装-bgo)。
+`docker compose` 默认把 `config.docker.yml` 挂到 `/etc/bililive-go/config.yml`、`Videos/` 挂到 `/srv/bililive`。首次运行后可在网页中继续改配置。
+
+NAS 用户使用自带 GUI 创建 compose 项目的流程见[群晖图文说明](./docs/Synology-related.md#如何用-docker-compose-安装-bgo)。
+
+### 安全与网络
+
+程序本身**没有登录鉴权**，所有 API（含录播文件、`/api/metrics`）对内网开放。不要直接暴露到公网，建议放在带 Basic Auth 的反向代理（Caddy / Nginx / Traefik）后面，并只开放 `8080`。
+
+容器默认监听所有网卡；如只给反代使用，可把端口绑定改成 `127.0.0.1:8080:8080`。启用 Grafana 时，`3000` 端口同样建议只绑定本机。
+
+### 升级与备份
+
+- 升级前备份 `config.yml` 和整个数据目录
+- 固定版本时修改镜像 tag 或使用 digest，不要长期使用 `latest`
+- 跨大版本升级先看 Releases 说明；数据库迁移只向前，回退需要恢复备份
 
 ## 网页管理
 
