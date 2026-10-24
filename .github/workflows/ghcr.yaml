@@ -134,7 +134,8 @@ jobs:
           file: Dockerfile
           platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ env.IMAGE }}:${{ env.VERSION }}
+          # 按 digest 推送时不能再指定 tag，否则 buildx 报 "can't push tagged ref ... by digest"；
+          # tag 由 merge-manifest 通过 imagetools 统一创建。
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
