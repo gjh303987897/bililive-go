@@ -1,5 +1,5 @@
 # Bililive-go
-[![CI](https://github.com/bililive-go/bililive-go/actions/workflows/tests.yaml/badge.svg?branch=master)](https://github.com/bililive-go/bililive-go/actions/workflows/tests.yaml)
+[![Publish Container Image](https://github.com/bililive-go/bililive-go/actions/workflows/ghcr.yaml/badge.svg?branch=master)](https://github.com/bililive-go/bililive-go/actions/workflows/ghcr.yaml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/bililive-go/bililive-go)](https://goreportcard.com/report/github.com/bililive-go/bililive-go)
 [![Github release](https://img.shields.io/github/release/bililive-go/bililive-go.svg)](https://github.com/bililive-go/bililive-go/releases/latest)
 [![Docker Pulls](https://img.shields.io/docker/pulls/chigusa/bililive-go.svg)](https://hub.docker.com/r/chigusa/bililive-go/)

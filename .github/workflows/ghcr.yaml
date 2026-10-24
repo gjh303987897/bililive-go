@@ -1,7 +1,9 @@
 name: Publish Container Image
 
-# 每次向 master 推送、或打 v* tag 时，构建多架构镜像并推送到 GHCR。
-# 分支推送打 edge/sha tag，版本 tag 打同名 tag（非 rc 额外更新 latest）。
+# 仓库唯一的自动化工作流：构建多架构镜像并推送到 GHCR。
+# - 推送 master：打 edge / sha-<短哈希> tag
+# - 推送 v* tag：打同名 tag，非 rc 额外更新 latest
+# - 也可在 Actions 页手动触发（同样走 edge tag）
 on:
   push:
     branches:
