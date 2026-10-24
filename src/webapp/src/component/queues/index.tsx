@@ -26,6 +26,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import { useI18n } from '../../i18n';
 import './index.css';
 
 const { Text } = Typography;
@@ -67,12 +68,12 @@ interface QueueData {
   upload_enabled: boolean;
 }
 
-const STATUS_TAGS: Record<QueueStatus, { color: string; label: string }> = {
-  pending: { color: 'default', label: '等待中' },
-  running: { color: 'processing', label: '执行中' },
-  completed: { color: 'success', label: '已完成' },
-  failed: { color: 'error', label: '失败' },
-  cancelled: { color: 'default', label: '已取消' },
+const STATUS_KEYS: Record<QueueStatus, { color: string; key: string }> = {
+  pending: { color: 'default', key: 'queue.pending' },
+  running: { color: 'processing', key: 'queue.running' },
+  completed: { color: 'success', key: 'queue.done' },
+  failed: { color: 'error', key: 'queue.failed' },
+  cancelled: { color: 'default', key: 'queue.cancelled' },
 };
 
 const fileNames = (task: QueueTask): string =>
@@ -99,20 +100,21 @@ const StatCard: React.FC<StatCardProps> = ({ icon, label, value, tone }) => (
   </Card>
 );
 
-const statusTag = (task: QueueTask) => {
+const statusTag = (task: QueueTask, t: (key: string) => string) => {
   if (task.status === 'running') {
     return (
       <Tag color="processing" className="queue-tag-running">
         <span className="queue-pulse" />
-        执行中
+        {t('queue.running')}
       </Tag>
     );
   }
-  const tag = STATUS_TAGS[task.status] ?? STATUS_TAGS.pending;
-  return <Tag color={tag.color}>{tag.label}</Tag>;
+  const tag = STATUS_KEYS[task.status] ?? STATUS_KEYS.pending;
+  return <Tag color={tag.color}>{t(tag.key)}</Tag>;
 };
 
 const Queues: React.FC = () => {
+  const { t } = useI18n();
   const [data, setData] = useState<QueueData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -193,7 +195,7 @@ const Queues: React.FC = () => {
 
   const baseColumns = useMemo<ColumnsType<QueueTask>>(() => [
     {
-      title: '文件',
+      title: t('queue.file'),
       key: 'files',
       render: (_, task) => (
         <Tooltip title={task.files.map((file) => file.path).join('\n')}>
@@ -202,7 +204,7 @@ const Queues: React.FC = () => {
       ),
     },
     {
-      title: '直播间',
+      title: t('queue.room'),
       key: 'room',
       width: 180,
       render: (_, task) => (
@@ -210,12 +212,12 @@ const Queues: React.FC = () => {
       ),
     },
     {
-      title: '状态',
+      title: t('queue.status'),
       key: 'status',
       width: 150,
       render: (_, task) => (
         <Space direction="vertical" size={0}>
-          {statusTag(task)}
+          {statusTag(task, t)}
           {task.status === 'running' && (
             <Progress percent={task.progress} size="small" className="queue-progress" />
           )}
@@ -223,69 +225,69 @@ const Queues: React.FC = () => {
       ),
     },
     {
-      title: '创建时间',
+      title: t('queue.created'),
       key: 'created_at',
       width: 130,
       render: (_, task) => formatTime(task.created_at),
     },
-  ], []);
+  ], [t]);
 
   const waitingColumns = useMemo<ColumnsType<QueueTask>>(() => [
     ...baseColumns,
     {
-      title: '操作',
+      title: t('queue.actions'),
       key: 'actions',
       width: 120,
       render: (_, task) => (
         <Space>
           {task.status === 'running' && (
-            <Button size="small" loading={acting === task.id} onClick={() => act(task, 'cancel')}>取消</Button>
+            <Button size="small" loading={acting === task.id} onClick={() => act(task, 'cancel')}>{t('common.cancel')}</Button>
           )}
-          <Popconfirm title="删除任务？本地文件不会删除" onConfirm={() => act(task, 'delete')}>
+          <Popconfirm title={t('queue.removeConfirm')} onConfirm={() => act(task, 'delete')}>
             <Button size="small" icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       ),
     },
-  ], [act, acting, baseColumns]);
+  ], [act, acting, baseColumns, t]);
 
   const failedColumns = useMemo<ColumnsType<QueueTask>>(() => [
     ...baseColumns,
     {
-      title: '错误',
+      title: t('queue.error'),
       key: 'error',
       render: (_, task) => (
         task.status === 'failed'
-          ? <Text type="danger" ellipsis={{ tooltip: task.error_message }}>{task.error_message || '未知错误'}</Text>
+          ? <Text type="danger" ellipsis={{ tooltip: task.error_message }}>{task.error_message || t('queue.unknownError')}</Text>
           : '-'
       ),
     },
     {
-      title: '操作',
+      title: t('queue.actions'),
       key: 'actions',
       width: 160,
       render: (_, task) => (
         <Space>
           {task.status === 'failed' && (
             <Button size="small" type="primary" loading={acting === task.id} onClick={() => act(task, 'retry')}>
-              重试
+              {t('common.retry')}
             </Button>
           )}
           {task.status === 'running' && (
-            <Button size="small" loading={acting === task.id} onClick={() => act(task, 'cancel')}>取消</Button>
+            <Button size="small" loading={acting === task.id} onClick={() => act(task, 'cancel')}>{t('common.cancel')}</Button>
           )}
-          <Popconfirm title="从队列移除？本地文件不会删除" onConfirm={() => act(task, 'delete')}>
+          <Popconfirm title={t('queue.removeConfirm')} onConfirm={() => act(task, 'delete')}>
             <Button size="small" icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       ),
     },
-  ], [act, acting, baseColumns]);
+  ], [act, acting, baseColumns, t]);
 
   const completedColumns = useMemo<ColumnsType<QueueTask>>(() => [
     ...baseColumns,
     {
-      title: '远程路径',
+      title: t('queue.remotePath'),
       key: 'remote',
       render: (_, task) => {
         const remote = task.files.find((file) => (file as QueueFile & { metadata?: Record<string, string> }).metadata?.remote_path);
@@ -294,7 +296,7 @@ const Queues: React.FC = () => {
         return <Text ellipsis={{ tooltip: value }}>{value}</Text>;
       },
     },
-  ], [baseColumns]);
+  ], [baseColumns, t]);
 
   const uploadQueue = useMemo(
     () => [...(data?.upload_pending ?? []), ...(data?.upload_failed ?? [])],
@@ -313,30 +315,30 @@ const Queues: React.FC = () => {
         <div className="queues-toolbar-row">
           <Space>
             <span className={`queues-live-dot${runningCount > 0 ? ' is-active' : ''}`} />
-            <Text strong>队列处理</Text>
-            <Text type="secondary">每 {secondsLeft} 秒自动刷新</Text>
+            <Text strong>{t('queue.title')}</Text>
+            <Text type="secondary">{t('queue.autoRefresh', { n: secondsLeft })}</Text>
           </Space>
-          <Button icon={<ReloadOutlined />} loading={loading} onClick={() => load()}>刷新</Button>
+          <Button icon={<ReloadOutlined />} loading={loading} onClick={() => load()}>{t('common.refresh')}</Button>
         </div>
       </Card>
 
       <Row gutter={12} className="queues-stats">
         <Col xs={12} md={6}>
-          <StatCard icon={<SyncOutlined spin={runningCount > 0} />} label="等待转码" value={data?.transcode_waiting.length ?? 0} tone="blue" />
+          <StatCard icon={<SyncOutlined spin={runningCount > 0} />} label={t('queue.waiting')} value={data?.transcode_waiting.length ?? 0} tone="blue" />
         </Col>
         <Col xs={12} md={6}>
-          <StatCard icon={<WarningOutlined />} label="转码失败" value={data?.transcode_failed.length ?? 0} tone="red" />
+          <StatCard icon={<WarningOutlined />} label={t('queue.failed')} value={data?.transcode_failed.length ?? 0} tone="red" />
         </Col>
         <Col xs={12} md={6}>
-          <StatCard icon={<CloudUploadOutlined />} label="待上传" value={uploadQueue.length} tone="amber" />
+          <StatCard icon={<CloudUploadOutlined />} label={t('queue.uploadPending')} value={uploadQueue.length} tone="amber" />
         </Col>
         <Col xs={12} md={6}>
-          <StatCard icon={<CheckCircleOutlined />} label="最近完成" value={data?.upload_completed.length ?? 0} tone="green" />
+          <StatCard icon={<CheckCircleOutlined />} label={t('queue.completed')} value={data?.upload_completed.length ?? 0} tone="green" />
         </Col>
       </Row>
 
       {error && (
-        <Alert type="error" showIcon closable message="队列加载失败" description={error} onClose={() => setError(null)} className="queues-alert" />
+        <Alert type="error" showIcon closable message={t('queue.loadFailed')} description={error} onClose={() => setError(null)} className="queues-alert" />
       )}
 
       {data && !data.upload_enabled && (
@@ -344,8 +346,8 @@ const Queues: React.FC = () => {
           type="info"
           showIcon
           className="queues-alert"
-          message="未启用远程上传"
-          description="在配置文件 remote_upload 中启用 WebDAV 或 S3 后，转码完成的视频会自动进入上传队列。"
+          message={t('queue.uploadDisabled')}
+          description={t('queue.uploadDisabledHint')}
         />
       )}
 
@@ -354,7 +356,7 @@ const Queues: React.FC = () => {
           items={[
             {
               key: 'transcode-waiting',
-              label: <span><SyncOutlined spin={runningCount > 0} /> 等待转码 <span className="queue-tab-count">{data?.transcode_waiting.length ?? 0}</span></span>,
+              label: <span><SyncOutlined spin={runningCount > 0} /> {t('queue.waiting')}<span className="queue-tab-count">{data?.transcode_waiting.length ?? 0}</span></span>,
               children: (
                 <Card size="small">
                   <Table
@@ -364,21 +366,21 @@ const Queues: React.FC = () => {
                     columns={waitingColumns}
                     rowClassName={() => 'queue-row'}
                     pagination={{ pageSize: 20, hideOnSinglePage: true }}
-                    locale={{ emptyText: <Empty description="没有等待转码的任务" /> }}
+                    locale={{ emptyText: <Empty description={t('queue.noWaiting')} /> }}
                   />
                 </Card>
               ),
             },
             {
               key: 'transcode-failed',
-              label: <span><WarningOutlined /> 转码失败 <span className="queue-tab-count is-error">{data?.transcode_failed.length ?? 0}</span></span>,
+              label: <span><WarningOutlined /> {t('queue.failed')}<span className="queue-tab-count is-error">{data?.transcode_failed.length ?? 0}</span></span>,
               children: (
                 <Card
                   size="small"
-                  title="失败的任务会保留源文件，可重试或手动处理"
+                  title={t('queue.failedHint')}
                   extra={(
-                    <Popconfirm title="清空失败队列？本地文件不会删除" onConfirm={clearFailed}>
-                      <Button size="small" danger>清空失败队列</Button>
+                    <Popconfirm title={t('queue.clearFailedConfirm')} onConfirm={clearFailed}>
+                      <Button size="small" danger>{t('queue.clearFailed')}</Button>
                     </Popconfirm>
                   )}
                 >
@@ -389,17 +391,17 @@ const Queues: React.FC = () => {
                     columns={failedColumns}
                     rowClassName={() => 'queue-row'}
                     pagination={{ pageSize: 20, hideOnSinglePage: true }}
-                    locale={{ emptyText: <Empty description="没有转码失败的任务" /> }}
+                    locale={{ emptyText: <Empty description={t('queue.noFailed')} /> }}
                   />
                 </Card>
               ),
             },
             {
               key: 'upload',
-              label: <span><CloudUploadOutlined /> 上传队列 <span className="queue-tab-count is-warn">{uploadQueue.length}</span></span>,
+              label: <span><CloudUploadOutlined /> {t('queue.tabUpload')}<span className="queue-tab-count is-warn">{uploadQueue.length}</span></span>,
               children: (
                 <>
-                  <Card size="small" title="待上传 / 上传失败" className="queues-card">
+                  <Card size="small" title={t('queue.pendingUploadTitle')} className="queues-card">
                     <Table
                       size="small"
                       rowKey="id"
@@ -407,17 +409,17 @@ const Queues: React.FC = () => {
                       columns={failedColumns}
                       rowClassName={() => 'queue-row'}
                       pagination={{ pageSize: 20, hideOnSinglePage: true }}
-                      locale={{ emptyText: <Empty description={data?.upload_enabled ? '没有待上传任务' : '远程上传未启用'} /> }}
+                      locale={{ emptyText: <Empty description={data?.upload_enabled ? t('queue.noUpload') : t('queue.uploadDisabled')} /> }}
                     />
                   </Card>
-                  <Card size="small" title={<span><CheckCircleOutlined /> 最近上传完成</span>}>
+                  <Card size="small" title={<span><CheckCircleOutlined />{t('queue.recentCompleted')}</span>}>
                     <Table
                       size="small"
                       rowKey="id"
                       dataSource={(data?.upload_completed ?? []).slice(0, 20)}
                       columns={completedColumns}
                       pagination={false}
-                      locale={{ emptyText: <Empty description="没有已完成的上传" /> }}
+                      locale={{ emptyText: <Empty description={t('queue.noCompleted')} /> }}
                     />
                   </Card>
                 </>

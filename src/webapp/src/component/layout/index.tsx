@@ -1,6 +1,6 @@
 import React from 'react';
 import { HashRouter as Router, Link } from 'react-router-dom';
-import { Layout, Menu, Button } from 'antd';
+import { Layout, Menu, Button, Tooltip } from 'antd';
 import {
     MonitorOutlined,
     UnorderedListOutlined,
@@ -17,6 +17,9 @@ import {
     ThunderboltOutlined
 } from '@ant-design/icons';
 import LineChartOutlined from '@ant-design/icons/LineChartOutlined';
+import { BulbOutlined, MoonOutlined, TranslationOutlined } from '@ant-design/icons';
+import { useI18n } from '../../i18n';
+import { useThemeMode } from '../../theme';
 import './layout.css';
 
 const { Header, Content, Sider } = Layout;
@@ -25,6 +28,14 @@ const ENABLE_IO_STATS_UI = true;
 
 interface Props {
     children?: React.ReactNode;
+}
+
+interface InjectedProps {
+    t: (key: string) => string;
+    mode: 'light' | 'dark';
+    toggleMode: () => void;
+    toggleLocale: () => void;
+    locale: 'zh' | 'en';
 }
 
 interface State {
@@ -57,8 +68,8 @@ const selectedKeyFromHash = (): string => {
     return match ? ROUTE_KEYS[match] : '1';
 };
 
-class RootLayout extends React.Component<Props, State> {
-    constructor(props: Props) {
+class RootLayoutInner extends React.Component<Props & InjectedProps, State> {
+    constructor(props: Props & InjectedProps) {
         super(props);
         // 从 localStorage 读取收起状态
         let collapsed = false;
@@ -101,18 +112,41 @@ class RootLayout extends React.Component<Props, State> {
 
     render() {
         const { collapsed } = this.state;
+        const { t, mode, toggleMode, toggleLocale, locale } = this.props;
         return (
             <Router>
                 <Layout className="all-layout">
                     <Header className="header small-header">
                         <h3 className="logo-text">Bililive-go</h3>
+                        <div className="header-actions">
+                            <Tooltip title={mode === 'dark' ? t('app.theme.light') : t('app.theme.dark')}>
+                                <Button
+                                    type="text"
+                                    className="header-action"
+                                    aria-label={mode === 'dark' ? t('app.theme.light') : t('app.theme.dark')}
+                                    icon={mode === 'dark' ? <BulbOutlined /> : <MoonOutlined />}
+                                    onClick={toggleMode}
+                                />
+                            </Tooltip>
+                            <Tooltip title={t('app.locale')}>
+                                <Button
+                                    type="text"
+                                    className="header-action header-locale"
+                                    aria-label={t('app.locale')}
+                                    icon={<TranslationOutlined />}
+                                    onClick={toggleLocale}
+                                >
+                                    {locale === 'en' ? 'EN' : '中'}
+                                </Button>
+                            </Tooltip>
+                        </div>
                     </Header>
                     <Layout>
                         <Sider
                             className="side-bar"
                             width={200}
                             collapsedWidth={60}
-                            style={{ background: '#fff' }}
+                            style={{ background: 'var(--surface)' }}
                             trigger={null}
                             collapsible
                             collapsed={collapsed}
@@ -120,7 +154,7 @@ class RootLayout extends React.Component<Props, State> {
                             {/* 折叠按钮在顶部，与菜单图标对齐 */}
                             <div style={{
                                 padding: '12px 0',
-                                borderBottom: '1px solid #f0f0f0',
+                                borderBottom: '1px solid var(--border)',
                                 width: '100%'
                             }}>
                                 <Button
@@ -135,7 +169,7 @@ class RootLayout extends React.Component<Props, State> {
                                         height: 40
                                     }}
                                 >
-                                    {!collapsed && '收起菜单'}
+                                    {!collapsed && (collapsed ? t('app.expand') : t('app.collapse'))}
                                 </Button>
                             </div>
                             <Menu
@@ -147,62 +181,62 @@ class RootLayout extends React.Component<Props, State> {
                                     {
                                         key: 'dashboard',
                                         icon: <ThunderboltOutlined />,
-                                        label: <Link to="/dashboard">监控面板</Link>,
+                                        label: <Link to="/dashboard">{t('nav.dashboard')}</Link>,
                                     },
                                     {
                                         key: '1',
                                         icon: <MonitorOutlined />,
-                                        label: <Link to="/">监控列表</Link>,
+                                        label: <Link to="/">{t('nav.lives')}</Link>,
                                     },
                                     {
                                         key: '2',
                                         icon: <DashboardOutlined />,
-                                        label: <Link to="/liveInfo">系统状态</Link>,
+                                        label: <Link to="/liveInfo">{t('nav.status')}</Link>,
                                     },
                                     {
                                         key: '3',
                                         icon: <SettingOutlined />,
-                                        label: <Link to="/configInfo">设置</Link>,
+                                        label: <Link to="/configInfo">{t('nav.settings')}</Link>,
                                     },
                                     {
                                         key: 'danmaku',
                                         icon: <CommentOutlined />,
-                                        label: <Link to="/danmaku">弹幕</Link>,
+                                        label: <Link to="/danmaku">{t('nav.danmaku')}</Link>,
                                     },
                                     {
                                         key: '4',
                                         icon: <FolderOutlined />,
-                                        label: <Link to="/fileList">文件</Link>,
+                                        label: <Link to="/fileList">{t('nav.files')}</Link>,
                                     },
                                     {
                                         key: '5',
                                         icon: <ToolOutlined />,
-                                        label: <a href="/tools/" target="_blank" rel="noopener noreferrer">工具</a>,
+                                        label: <a href="/tools/" target="_blank" rel="noopener noreferrer">{t('nav.tools')}</a>,
                                     },
                                     {
                                         key: 'tasks',
                                         icon: <UnorderedListOutlined />,
-                                        label: <Link to="/tasks">任务队列</Link>,
+                                        label: <Link to="/tasks">{t('nav.tasks')}</Link>,
                                     },
                                     {
                                         key: 'queues',
                                         icon: <SyncOutlined />,
-                                        label: <Link to="/queues">转码/上传队列</Link>,
+                                        label: <Link to="/queues">{t('nav.queues')}</Link>,
                                     },
                                     {
                                         key: 'scheduler',
                                         icon: <CalendarOutlined />,
-                                        label: <a href="/scheduler/" target="_blank" rel="noopener noreferrer">调度器</a>,
+                                        label: <a href="/scheduler/" target="_blank" rel="noopener noreferrer">{t('nav.scheduler')}</a>,
                                     },
                                     ...(ENABLE_IO_STATS_UI ? [{
                                         key: 'iostats',
                                         icon: <LineChartOutlined />,
-                                        label: <Link to="/iostats">IO 统计</Link>,
+                                        label: <Link to="/iostats">{t('nav.iostats')}</Link>,
                                     }] : []),
                                     {
                                         key: 'update',
                                         icon: <CloudUploadOutlined />,
-                                        label: <Link to="/update">更新</Link>,
+                                        label: <Link to="/update">{t('nav.update')}</Link>,
                                     }
                                 ]}
                             />
@@ -211,7 +245,7 @@ class RootLayout extends React.Component<Props, State> {
                             <Content
                                 className="inside-content-padding"
                                 style={{
-                                    background: '#fff',
+                                    background: 'var(--surface)',
                                     margin: 0,
                                     minHeight: 280,
                                     overflow: "auto",
@@ -226,4 +260,12 @@ class RootLayout extends React.Component<Props, State> {
     }
 }
 
-export default RootLayout;
+export default function RootLayout({ children }: Props) {
+    const { t, toggleLocale, locale } = useI18n();
+    const { mode, toggleMode } = useThemeMode();
+    return (
+        <RootLayoutInner t={t} mode={mode} toggleMode={toggleMode} toggleLocale={toggleLocale} locale={locale}>
+            {children}
+        </RootLayoutInner>
+    );
+}

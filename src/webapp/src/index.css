@@ -1,5 +1,49 @@
+:root {
+  --bg-layout: #f5f6f8;
+  --surface: #ffffff;
+  --surface-muted: #fafafa;
+  --border: #f0f0f0;
+  --text: rgba(0, 0, 0, 0.88);
+  --text-muted: #8c8c8c;
+  --shadow: rgba(0, 0, 0, 0.08);
+  --accent-soft: rgba(22, 119, 255, 0.12);
+}
+
+[data-theme='dark'] {
+  --bg-layout: #0f1115;
+  --surface: #171a21;
+  --surface-muted: #1d2129;
+  --border: #272c35;
+  --text: rgba(255, 255, 255, 0.88);
+  --text-muted: #8b949e;
+  --shadow: rgba(0, 0, 0, 0.45);
+  --accent-soft: rgba(22, 119, 255, 0.2);
+}
+
+[data-theme='dark'] .queue-tab-count {
+  color: #69b1ff;
+}
+
+[data-theme='dark'] .queue-stat-value,
+[data-theme='dark'] .queue-stat-icon {
+  filter: brightness(1.15);
+}
+
+[data-theme='dark'] .queue-stat {
+  background: var(--surface-muted);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
+  background: var(--bg-layout);
+  color: var(--text);
+  transition: background-color 0.25s ease, color 0.25s ease;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;

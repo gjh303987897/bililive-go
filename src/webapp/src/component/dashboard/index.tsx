@@ -42,6 +42,7 @@ import {
 import dayjs from 'dayjs';
 import MemoryStats from '../io-stats/MemoryStats';
 import MemoryHistoryChart from '../io-stats/MemoryHistoryChart';
+import { useI18n } from '../../i18n';
 import './index.css';
 
 const { Text } = Typography;
@@ -121,30 +122,28 @@ interface RoomHistory {
   daily: DashboardDailyPoint[];
 }
 
-const END_REASON_LABELS: Record<string, string> = {
-  normal: '正常下播',
-  user_stop: '停止监控',
-  crash: '程序崩溃',
-  error: '录制异常',
-  unknown: '未知',
+const END_REASON_KEYS: Record<string, string> = {
+  normal: 'dash.reason.normal',
+  user_stop: 'dash.reason.user_stop',
+  crash: 'dash.reason.crash',
+  error: 'dash.reason.error',
+  unknown: 'dash.reason.unknown',
 };
 
-const endReasonLabel = (reason: string): string => END_REASON_LABELS[reason] ?? (reason || '未知');
-
-const RANGE_OPTIONS = [
-  { value: 60 * 60 * 1000, label: '最近 1 小时' },
-  { value: 6 * 60 * 60 * 1000, label: '最近 6 小时' },
-  { value: 24 * 60 * 60 * 1000, label: '最近 24 小时' },
-  { value: 7 * 24 * 60 * 60 * 1000, label: '最近 7 天' },
-  { value: 30 * 24 * 60 * 60 * 1000, label: '最近 30 天' },
+const RANGE_KEYS = [
+  { value: 60 * 60 * 1000, key: 'dash.range1h' },
+  { value: 6 * 60 * 60 * 1000, key: 'dash.range6h' },
+  { value: 24 * 60 * 60 * 1000, key: 'dash.range24h' },
+  { value: 7 * 24 * 60 * 60 * 1000, key: 'dash.range7d' },
+  { value: 30 * 24 * 60 * 60 * 1000, key: 'dash.range30d' },
 ];
 
-const REFRESH_OPTIONS = [
-  { value: 5000, label: '5 秒' },
-  { value: 10000, label: '10 秒' },
-  { value: 30000, label: '30 秒' },
-  { value: 60000, label: '1 分钟' },
-  { value: 0, label: '关闭' },
+const REFRESH_KEYS = [
+  { value: 5000, label: '5s' },
+  { value: 10000, label: '10s' },
+  { value: 30000, label: '30s' },
+  { value: 60000, label: '1m' },
+  { value: 0, key: 'dash.off' },
 ];
 
 const SERIES_COLORS = ['#1677ff', '#52c41a', '#fa8c16', '#eb2f96', '#722ed1', '#13c2c2', '#f5222d', '#a0d911', '#2f54eb', '#faad14'];
@@ -163,24 +162,26 @@ const formatBytes = (value: number): string => {
 
 const formatSpeed = (value: number): string => `${formatBytes(value)}/s`;
 
-const formatDuration = (seconds: number): string => {
+const formatDuration = (seconds: number, en = false): string => {
   if (!seconds || seconds <= 0) return '-';
   const total = Math.floor(seconds);
   const days = Math.floor(total / 86400);
   const hours = Math.floor((total % 86400) / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const secs = total % 60;
-  if (days > 0) return `${days} 天 ${hours} 小时`;
-  if (hours > 0) return `${hours} 小时 ${minutes} 分`;
-  if (minutes > 0) return `${minutes} 分 ${secs} 秒`;
-  return `${secs} 秒`;
+  if (days > 0) return en ? `${days}d ${hours}h` : `${days} 天 ${hours} 小时`;
+  if (hours > 0) return en ? `${hours}h ${minutes}m` : `${hours} 小时 ${minutes} 分`;
+  if (minutes > 0) return en ? `${minutes}m ${secs}s` : `${minutes} 分 ${secs} 秒`;
+  return en ? `${secs}s` : `${secs} 秒`;
 };
 
 const roomLabel = (room: Pick<DashboardRoom, 'host_name' | 'room_name' | 'live_id'>): string =>
   room.host_name || room.room_name || room.live_id;
 
 const Dashboard: React.FC = () => {
-  const [range, setRange] = useState(RANGE_OPTIONS[2].value);
+  const { t, locale } = useI18n();
+  const en = locale === 'en';
+  const [range, setRange] = useState(RANGE_KEYS[2].value);
   const [refreshInterval, setRefreshInterval] = useState(10000);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -286,57 +287,57 @@ const Dashboard: React.FC = () => {
 
   const historyColumns = useMemo<ColumnsType<RoomHistorySession>>(() => [
     {
-      title: '开播时间',
+      title: t('dash.startAt'),
       dataIndex: 'start_time',
       key: 'start_time',
       width: 160,
       render: (value: number) => dayjs(value).format('YYYY-MM-DD HH:mm'),
     },
     {
-      title: '下播时间',
+      title: t('dash.endAt'),
       dataIndex: 'end_time',
       key: 'end_time',
       width: 160,
-      render: (value: number, session) => (session.ongoing ? <Tag color="green">直播中</Tag> : dayjs(value).format('YYYY-MM-DD HH:mm')),
+      render: (value: number, session) => (session.ongoing ? <Tag color="green">{t('dash.liveNow')}</Tag> : dayjs(value).format('YYYY-MM-DD HH:mm')),
     },
     {
-      title: '时长',
+      title: t('dash.duration'),
       dataIndex: 'duration_seconds',
       key: 'duration_seconds',
       width: 110,
-      render: (value: number) => formatDuration(value),
+      render: (value: number) => formatDuration(value, en),
     },
     {
-      title: '结束原因',
+      title: t('dash.endReason'),
       dataIndex: 'end_reason',
       key: 'end_reason',
-      render: (value: string, session) => (session.ongoing ? '-' : endReasonLabel(value)),
+      render: (value: string, session) => (session.ongoing ? '-' : t(END_REASON_KEYS[value] ?? 'dash.reason.unknown')),
     },
-  ], []);
+  ], [t, en]);
 
   const columns = useMemo<ColumnsType<DashboardRoom>>(() => [
     {
-      title: '状态',
+      title: t('queue.status'),
       key: 'status',
       width: 130,
       render: (_, room) => {
         const tags: React.ReactNode[] = [];
-        if (room.recording) tags.push(<Tag color="red" key="rec">录制中</Tag>);
-        if (room.recording_preparing) tags.push(<Tag color="orange" key="prep">录制准备中</Tag>);
-        if (room.status) tags.push(<Tag color="green" key="live">直播中</Tag>);
-        if (room.listening) tags.push(<Tag color="blue" key="listen">监控中</Tag>);
-        if (tags.length === 0) tags.push(<Tag key="idle">已停止</Tag>);
+        if (room.recording) tags.push(<Tag color="red" key="rec">{t('dash.recording')}</Tag>);
+        if (room.recording_preparing) tags.push(<Tag color="orange" key="prep">{t('dash.preparing')}</Tag>);
+        if (room.status) tags.push(<Tag color="green" key="live">{t('dash.live')}</Tag>);
+        if (room.listening) tags.push(<Tag color="blue" key="listen">{t('dash.listening')}</Tag>);
+        if (tags.length === 0) tags.push(<Tag key="idle">{t('dash.idle')}</Tag>);
         return <Space size={4} wrap>{tags}</Space>;
       },
     },
     {
-      title: '平台',
+      title: t('dash.platform'),
       dataIndex: 'platform',
       key: 'platform',
       width: 90,
     },
     {
-      title: '主播 / 房间',
+      title: t('dash.hostRoom'),
       key: 'room',
       render: (_, room) => (
         <div>
@@ -346,29 +347,29 @@ const Dashboard: React.FC = () => {
           <div className="dashboard-room-sub">
             {room.room_name}
             {' · '}
-            <Link to={`/?room=${room.live_id}`}>监控页</Link>
+            <Link to={`/?room=${room.live_id}`}>{t('dash.openRoom')}</Link>
           </div>
         </div>
       ),
     },
     {
-      title: '开播时长',
+      title: t('dash.liveDuration'),
       dataIndex: 'live_seconds',
       key: 'live_seconds',
       width: 110,
       sorter: (a, b) => a.live_seconds - b.live_seconds,
-      render: (value: number) => formatDuration(value),
+      render: (value: number) => formatDuration(value, en),
     },
     {
-      title: '本次录制',
+      title: t('dash.recordDuration'),
       dataIndex: 'recorded_seconds',
       key: 'recorded_seconds',
       width: 110,
       sorter: (a, b) => a.recorded_seconds - b.recorded_seconds,
-      render: (value: number) => formatDuration(value),
+      render: (value: number) => formatDuration(value, en),
     },
     {
-      title: '文件大小',
+      title: t('dash.fileSize'),
       dataIndex: 'total_bytes',
       key: 'total_bytes',
       width: 110,
@@ -376,7 +377,7 @@ const Dashboard: React.FC = () => {
       render: (value: number) => formatBytes(value),
     },
     {
-      title: '当前速率',
+      title: t('dash.speed'),
       dataIndex: 'speed',
       key: 'speed',
       width: 110,
@@ -384,16 +385,16 @@ const Dashboard: React.FC = () => {
       render: (value: number) => formatSpeed(value),
     },
     {
-      title: '窗口内开播',
+      title: t('dash.inWindow'),
       dataIndex: 'seconds_in_range',
       key: 'seconds_in_range',
       width: 130,
       sorter: (a, b) => a.seconds_in_range - b.seconds_in_range,
       render: (value: number, room) => (
-        <Tooltip title={`${room.sessions_in_range} 个直播会话`}>{formatDuration(value)}</Tooltip>
+        <Tooltip title={t('dash.sessionsTooltip', { n: room.sessions_in_range })}>{formatDuration(value, en)}</Tooltip>
       ),
     },
-  ], []);
+  ], [t, en]);
 
   const summary = data?.summary;
 
@@ -401,26 +402,26 @@ const Dashboard: React.FC = () => {
     <div className="dashboard-page">
       <Card size="small" className="dashboard-toolbar">
         <Space wrap>
-          <Text strong>统计窗口</Text>
+          <Text strong>{t('dash.window')}</Text>
           <Select
             value={range}
             style={{ width: 140 }}
-            options={RANGE_OPTIONS}
+            options={RANGE_KEYS.map((item) => ({ value: item.value, label: t(item.key) }))}
             onChange={setRange}
           />
-          <Text strong>自动刷新</Text>
+          <Text strong>{t('dash.refresh')}</Text>
           <Select
             value={refreshInterval}
             style={{ width: 110 }}
-            options={REFRESH_OPTIONS}
+            options={REFRESH_KEYS.map((item) => ({ value: item.value, label: item.key ? t(item.key) : item.label }))}
             onChange={setRefreshInterval}
           />
-          <Button icon={<ReloadOutlined />} loading={loading} onClick={load}>刷新</Button>
+          <Button icon={<ReloadOutlined />} loading={loading} onClick={load}>{t('common.refresh')}</Button>
           <Link to="/iostats">
-            <Button icon={<DatabaseOutlined />} type="link">原始 IO 数据</Button>
+            <Button icon={<DatabaseOutlined />} type="link">{t('dash.rawIO')}</Button>
           </Link>
           <Text type="secondary">
-            更新于 {updatedAt ? dayjs(updatedAt).format('HH:mm:ss') : '-'}
+            {t('common.updatedAt')} {updatedAt ? dayjs(updatedAt).format('HH:mm:ss') : '-'}
           </Text>
         </Space>
       </Card>
@@ -430,7 +431,7 @@ const Dashboard: React.FC = () => {
           type="error"
           showIcon
           closable
-          message="监控数据加载失败"
+          message={t('dash.loadFailed')}
           description={error}
           onClose={() => setError(null)}
           className="dashboard-alert"
@@ -441,22 +442,22 @@ const Dashboard: React.FC = () => {
         <Row gutter={16} className="dashboard-summary">
           <Col xs={12} md={6}>
             <Card size="small">
-              <Statistic title="直播间" value={summary?.rooms ?? 0} prefix={<VideoCameraOutlined />} />
+              <Statistic title={t('dash.rooms')} value={summary?.rooms ?? 0} prefix={<VideoCameraOutlined />} />
             </Card>
           </Col>
           <Col xs={12} md={6}>
             <Card size="small">
-              <Statistic title="监控中" value={summary?.listening ?? 0} />
+              <Statistic title={t('dash.monitoring')} value={summary?.listening ?? 0} />
             </Card>
           </Col>
           <Col xs={12} md={6}>
             <Card size="small">
-              <Statistic title="直播中 / 录制中" value={summary?.live ?? 0} suffix={`/ ${summary?.recording ?? 0}`} />
+              <Statistic title={t('dash.liveRecording')} value={summary?.live ?? 0} suffix={`/ ${summary?.recording ?? 0}`} />
             </Card>
           </Col>
           <Col xs={12} md={6}>
             <Card size="small">
-              <Statistic title="录制文件总量" value={formatBytes(summary?.total_bytes ?? 0)} />
+              <Statistic title={t('dash.totalBytes')} value={formatBytes(summary?.total_bytes ?? 0)} />
             </Card>
           </Col>
         </Row>
@@ -466,13 +467,13 @@ const Dashboard: React.FC = () => {
           items={[
             {
               key: 'overview',
-              label: <span><ThunderboltOutlined />实时概览</span>,
+              label: <span><ThunderboltOutlined />{t('dash.overview')}</span>,
               children: (
                 <>
-                  <Card size="small" title="下载速率" className="dashboard-card">
+                  <Card size="small" title={t('dash.bitrate')} className="dashboard-card">
                     {bitrateChart.rows.length === 0 ? (
                       <Empty
-                        description={data?.iostats_enabled === false ? 'IO 统计模块未启用' : '当前窗口没有速率数据'}
+                        description={data?.iostats_enabled === false ? t('dash.ioDisabled') : t('dash.bitrateEmpty')}
                       />
                     ) : (
                       <div className="dashboard-chart">
@@ -515,9 +516,9 @@ const Dashboard: React.FC = () => {
                     )}
                   </Card>
 
-                  <Card size="small" title="窗口内开播时长排行" className="dashboard-card">
+                  <Card size="small" title={t('dash.rank')} className="dashboard-card">
                     {rankingChart.length === 0 ? (
-                      <Empty description="当前窗口没有开播记录" />
+                      <Empty description={t('dash.rankEmpty')} />
                     ) : (
                       <div className="dashboard-chart dashboard-chart-small">
                         <ResponsiveContainer>
@@ -525,7 +526,7 @@ const Dashboard: React.FC = () => {
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis type="number" unit="h" />
                             <YAxis type="category" dataKey="name" width={120} />
-                            <RechartsTooltip formatter={(value) => [`${Number(value)} 小时`, '开播时长']} />
+                            <RechartsTooltip formatter={(value) => [en ? `${Number(value)}h` : `${Number(value)} 小时`, t('dash.liveDuration')]} />
                             <Bar dataKey="hours" fill="#1677ff" isAnimationActive={false} />
                           </BarChart>
                         </ResponsiveContainer>
@@ -533,9 +534,9 @@ const Dashboard: React.FC = () => {
                     )}
                   </Card>
 
-                  <Card size="small" title="每日开播时长（窗口内）" className="dashboard-card">
+                  <Card size="small" title={t('dash.daily')} className="dashboard-card">
                     {dailyChart.length === 0 ? (
-                      <Empty description="当前窗口没有开播记录" />
+                      <Empty description={t('dash.rankEmpty')} />
                     ) : (
                       <div className="dashboard-chart dashboard-chart-small">
                         <ResponsiveContainer>
@@ -547,8 +548,10 @@ const Dashboard: React.FC = () => {
                               formatter={(value, name, entry) => {
                                 const point = entry?.payload as { sessions: number; rooms: number } | undefined;
                                 return [
-                                  `${Number(value)} 小时`,
-                                  `${point?.sessions ?? 0} 场 · ${point?.rooms ?? 0} 个直播间`,
+                                  en ? `${Number(value)}h` : `${Number(value)} 小时`,
+                                  en
+                                    ? `${point?.sessions ?? 0} sessions · ${point?.rooms ?? 0} rooms`
+                                    : `${point?.sessions ?? 0} 场 · ${point?.rooms ?? 0} 个直播间`,
                                 ];
                               }}
                             />
@@ -559,7 +562,7 @@ const Dashboard: React.FC = () => {
                     )}
                   </Card>
 
-                  <Card size="small" title="直播间明细" className="dashboard-card">
+                  <Card size="small" title={t('dash.details')} className="dashboard-card">
                     <Table
                       size="small"
                       rowKey="live_id"
@@ -574,7 +577,7 @@ const Dashboard: React.FC = () => {
             },
             {
               key: 'system',
-              label: <span><AreaChartOutlined />系统资源</span>,
+              label: <span><AreaChartOutlined />{t('dash.system')}</span>,
               children: (
                 <>
                   <MemoryStats />
@@ -595,10 +598,10 @@ const Dashboard: React.FC = () => {
         width={720}
         open={historyRoom !== null}
         onClose={() => setHistoryRoom(null)}
-        title={historyRoom ? `${roomLabel(historyRoom)} 的开播历史` : '开播历史'}
+        title={historyRoom ? t('dash.historyOf', { name: roomLabel(historyRoom) }) : t('dash.history')}
         extra={historyRoom && (
           <Link to={`/?room=${historyRoom.live_id}`}>
-            <Button type="link">打开监控页</Button>
+            <Button type="link">{t("dash.openRoom")}</Button>
           </Link>
         )}
       >
@@ -606,14 +609,14 @@ const Dashboard: React.FC = () => {
           {history ? (
             <>
               <Descriptions size="small" column={3} className="dashboard-history-summary">
-                <Descriptions.Item label="窗口">{history.days} 天</Descriptions.Item>
-                <Descriptions.Item label="开播场次">{history.total_sessions}</Descriptions.Item>
-                <Descriptions.Item label="累计开播">{formatDuration(history.total_seconds)}</Descriptions.Item>
+                <Descriptions.Item label={t("dash.historyDays")}>{t("dash.days", { n: history.days })}</Descriptions.Item>
+                <Descriptions.Item label={t("dash.sessions")}>{history.total_sessions}</Descriptions.Item>
+                <Descriptions.Item label={t('dash.totalLive')}>{formatDuration(history.total_seconds, en)}</Descriptions.Item>
               </Descriptions>
 
-              <Card size="small" title="每日开播时长" className="dashboard-card">
+              <Card size="small" title={t('dash.dailyDuration')} className="dashboard-card">
                 {history.daily.length === 0 ? (
-                  <Empty description="窗口内没有开播记录" />
+                  <Empty description={t('dash.noRecord')} />
                 ) : (
                   <div className="dashboard-chart dashboard-chart-small">
                     <ResponsiveContainer>
@@ -625,7 +628,7 @@ const Dashboard: React.FC = () => {
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="date" />
                         <YAxis unit="h" />
-                        <RechartsTooltip formatter={(value) => [`${Number(value)} 小时`, '开播时长']} />
+                        <RechartsTooltip formatter={(value) => [en ? `${Number(value)}h` : `${Number(value)} 小时`, t('dash.liveDuration')]} />
                         <Bar dataKey="hours" fill="#1677ff" isAnimationActive={false} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -633,7 +636,7 @@ const Dashboard: React.FC = () => {
                 )}
               </Card>
 
-              <Card size="small" title="开播记录" className="dashboard-card">
+              <Card size="small" title={t('dash.records')} className="dashboard-card">
                 <Table
                   size="small"
                   rowKey="start_time"
@@ -644,7 +647,7 @@ const Dashboard: React.FC = () => {
               </Card>
             </>
           ) : (
-            !historyLoading && <Empty description="暂无记录" />
+            !historyLoading && <Empty description={t('dash.noHistory')} />
           )}
         </Spin>
       </Drawer>

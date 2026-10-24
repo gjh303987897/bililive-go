@@ -48,7 +48,7 @@
 
 .queue-stat:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 6px 18px var(--shadow);
 }
 
 .queue-stat .ant-card-body {
@@ -73,7 +73,7 @@
 
 .queue-stat-label {
     font-size: 12px;
-    color: #8c8c8c;
+    color: var(--text-muted);
 }
 
 .queue-stat-blue { color: #1677ff; }
@@ -98,7 +98,7 @@
     font-size: 12px;
     line-height: 18px;
     text-align: center;
-    background: rgba(22, 119, 255, 0.12);
+    background: var(--accent-soft);
     color: #1677ff;
     transition: background 0.2s ease;
 }

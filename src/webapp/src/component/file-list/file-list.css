@@ -140,7 +140,7 @@
 }
 
 .ant-table-thead>tr>th {
-    background: #fafafa !important;
+    background: var(--surface-muted) !important;
     font-weight: 600 !important;
 }
 
